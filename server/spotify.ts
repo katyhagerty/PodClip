@@ -1,6 +1,6 @@
 import { SpotifyApi } from "@spotify/web-api-ts-sdk";
 
-let connectionSettings: any;
+let connectionSettings: any = null;
 
 interface TokenData {
   accessToken: string;
@@ -10,6 +10,19 @@ interface TokenData {
 }
 
 async function getAccessToken(): Promise<TokenData> {
+  if (connectionSettings && connectionSettings.settings?.expires_at && 
+      new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
+    const accessToken = connectionSettings.settings?.access_token || 
+                        connectionSettings.settings?.oauth?.credentials?.access_token;
+    const clientId = connectionSettings.settings?.oauth?.credentials?.client_id;
+    const refreshToken = connectionSettings.settings?.oauth?.credentials?.refresh_token;
+    const expiresIn = connectionSettings.settings?.oauth?.credentials?.expires_in;
+    
+    if (accessToken && clientId && refreshToken) {
+      return { accessToken, clientId, refreshToken, expiresIn: expiresIn || 3600 };
+    }
+  }
+
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY 
     ? 'repl ' + process.env.REPL_IDENTITY 
@@ -33,12 +46,13 @@ async function getAccessToken(): Promise<TokenData> {
 
   const refreshToken =
     connectionSettings?.settings?.oauth?.credentials?.refresh_token;
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+  const accessToken = connectionSettings?.settings?.access_token || 
+                      connectionSettings?.settings?.oauth?.credentials?.access_token;
   const clientId = connectionSettings?.settings?.oauth?.credentials?.client_id;
-  const expiresIn = connectionSettings.settings?.oauth?.credentials?.expires_in;
+  const expiresIn = connectionSettings?.settings?.oauth?.credentials?.expires_in;
 
   if (!connectionSettings || !accessToken || !clientId || !refreshToken) {
-    throw new Error('Spotify not connected');
+    throw new Error('Spotify not connected. Please reconnect your Spotify account.');
   }
 
   return { accessToken, clientId, refreshToken, expiresIn: expiresIn || 3600 };
@@ -68,15 +82,31 @@ export interface SpotifyEpisode {
 
 export async function searchEpisodes(query: string): Promise<SpotifyEpisode[]> {
   try {
-    const spotify = await getUncachableSpotifyClient();
-    const results = await spotify.search(query, ["episode"], undefined, 20);
+    const { accessToken } = await getAccessToken();
     
-    return results.episodes.items.map((episode) => ({
+    const response = await fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=episode&limit=20`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const episodes = data.episodes?.items || [];
+    
+    return episodes.map((episode: any) => ({
       id: episode.id,
       name: episode.name,
-      showName: episode.show.name,
-      showImageUrl: episode.images?.[0]?.url || episode.show.images?.[0]?.url || null,
-      description: episode.description,
+      showName: episode.show?.name || 'Unknown Show',
+      showImageUrl: episode.images?.[0]?.url || episode.show?.images?.[0]?.url || null,
+      description: episode.description || '',
       durationMs: episode.duration_ms,
     }));
   } catch (error) {

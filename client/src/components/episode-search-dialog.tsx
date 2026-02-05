@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Podcast, Plus, Clock } from "lucide-react";
+import { Search, Podcast, Plus, Clock, AlertCircle } from "lucide-react";
 
 interface Episode {
   id: string;
@@ -41,19 +41,22 @@ export function EpisodeSearchDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
-  const { data: recentEpisodes, isLoading: recentLoading } = useQuery<Episode[]>({
+  const { data: recentEpisodes, isLoading: recentLoading, isError: recentError } = useQuery<Episode[]>({
     queryKey: ["/api/spotify/recent"],
     enabled: open,
+    retry: false,
   });
 
-  const { data: searchResults, isLoading: searchLoading } = useQuery<Episode[]>({
+  const { data: searchResults, isLoading: searchLoading, isError: searchError } = useQuery<Episode[]>({
     queryKey: ["/api/spotify/search", { q: debouncedQuery }],
     enabled: debouncedQuery.length >= 2,
+    retry: false,
   });
 
   const isSearching = debouncedQuery.length >= 2;
   const episodes = isSearching ? searchResults : recentEpisodes;
   const isLoading = isSearching ? searchLoading : recentLoading;
+  const hasError = isSearching ? searchError : recentError;
 
   useEffect(() => {
     if (!open) {
@@ -124,7 +127,15 @@ export function EpisodeSearchDialog({
               <span>Your Episodes</span>
             </div>
           )}
-          {isLoading ? (
+          {hasError ? (
+            <div className="flex flex-col items-center justify-center h-full text-center py-12">
+              <AlertCircle className="w-12 h-12 text-destructive/50 mb-4" />
+              <p className="text-muted-foreground font-medium">Spotify Connection Issue</p>
+              <p className="text-sm text-muted-foreground/70 mt-1 max-w-[280px]">
+                Please reconnect your Spotify account in the integrations panel to search for episodes.
+              </p>
+            </div>
+          ) : isLoading ? (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="flex gap-3 p-3 rounded-md">
