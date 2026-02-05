@@ -113,3 +113,47 @@ export async function getSavedShows(): Promise<SpotifyEpisode[]> {
     throw error;
   }
 }
+
+export async function getRecentlyPlayedEpisodes(): Promise<SpotifyEpisode[]> {
+  try {
+    const { accessToken } = await getAccessToken();
+    
+    const response = await fetch(
+      'https://api.spotify.com/v1/me/player/recently-played?limit=50',
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const episodes: SpotifyEpisode[] = [];
+    const seenIds = new Set<string>();
+    
+    for (const item of data.items || []) {
+      if (item.track?.type === 'episode' && !seenIds.has(item.track.id)) {
+        seenIds.add(item.track.id);
+        const episode = item.track;
+        episodes.push({
+          id: episode.id,
+          name: episode.name,
+          showName: episode.show?.name || 'Unknown Show',
+          showImageUrl: episode.images?.[0]?.url || episode.show?.images?.[0]?.url || null,
+          description: episode.description || '',
+          durationMs: episode.duration_ms,
+        });
+      }
+    }
+    
+    return episodes;
+  } catch (error) {
+    console.error("Error getting recently played episodes:", error);
+    throw error;
+  }
+}

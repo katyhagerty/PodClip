@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertBookmarkSchema } from "@shared/schema";
-import { searchEpisodes, getSavedShows } from "./spotify";
+import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes } from "./spotify";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -104,6 +104,28 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching shows:", error);
       res.status(500).json({ error: "Failed to fetch shows" });
+    }
+  });
+
+  // Get recently played episodes (falls back to saved shows if unavailable)
+  app.get("/api/spotify/recent", async (req, res) => {
+    try {
+      const episodes = await getRecentlyPlayedEpisodes();
+      if (episodes.length > 0) {
+        res.json(episodes);
+      } else {
+        const savedEpisodes = await getSavedShows();
+        res.json(savedEpisodes);
+      }
+    } catch (error) {
+      console.error("Error fetching recent episodes, trying saved shows:", error);
+      try {
+        const savedEpisodes = await getSavedShows();
+        res.json(savedEpisodes);
+      } catch (fallbackError) {
+        console.error("Error fetching saved shows fallback:", fallbackError);
+        res.status(500).json({ error: "Failed to fetch episodes" });
+      }
     }
   });
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Podcast, Plus } from "lucide-react";
+import { Search, Podcast, Plus, Clock } from "lucide-react";
 
 interface Episode {
   id: string;
@@ -41,10 +41,26 @@ export function EpisodeSearchDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
-  const { data: episodes, isLoading } = useQuery<Episode[]>({
+  const { data: recentEpisodes, isLoading: recentLoading } = useQuery<Episode[]>({
+    queryKey: ["/api/spotify/recent"],
+    enabled: open,
+  });
+
+  const { data: searchResults, isLoading: searchLoading } = useQuery<Episode[]>({
     queryKey: ["/api/spotify/search", { q: debouncedQuery }],
     enabled: debouncedQuery.length >= 2,
   });
+
+  const isSearching = debouncedQuery.length >= 2;
+  const episodes = isSearching ? searchResults : recentEpisodes;
+  const isLoading = isSearching ? searchLoading : recentLoading;
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery("");
+      setDebouncedQuery("");
+    }
+  }, [open]);
 
   const handleSearch = () => {
     setDebouncedQuery(searchQuery);
@@ -74,10 +90,13 @@ export function EpisodeSearchDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Podcast className="w-5 h-5 text-primary" />
-            Search Episodes
+            {isSearching ? "Search Results" : "Add Clip"}
           </DialogTitle>
           <DialogDescription>
-            Search for podcast episodes from your Spotify library.
+            {isSearching 
+              ? "Select an episode from your search results."
+              : "Choose from your recently played episodes, or search for more."
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -99,6 +118,12 @@ export function EpisodeSearchDialog({
         </div>
 
         <ScrollArea className="h-[400px] mt-4">
+          {!isSearching && episodes && episodes.length > 0 && (
+            <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
+              <Clock className="w-4 h-4" />
+              <span>Your Episodes</span>
+            </div>
+          )}
           {isLoading ? (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5].map((i) => (
@@ -152,7 +177,7 @@ export function EpisodeSearchDialog({
                 </div>
               ))}
             </div>
-          ) : debouncedQuery.length >= 2 ? (
+          ) : isSearching ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-12">
               <Podcast className="w-12 h-12 text-muted-foreground/50 mb-4" />
               <p className="text-muted-foreground">No episodes found</p>
@@ -162,10 +187,10 @@ export function EpisodeSearchDialog({
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center py-12">
-              <Search className="w-12 h-12 text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">Search for episodes</p>
+              <Clock className="w-12 h-12 text-muted-foreground/50 mb-4" />
+              <p className="text-muted-foreground">No recent episodes</p>
               <p className="text-sm text-muted-foreground/70 mt-1">
-                Enter at least 2 characters to search
+                Listen to some podcasts on Spotify first, or use search
               </p>
             </div>
           )}
