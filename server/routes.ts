@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertBookmarkSchema } from "@shared/schema";
-import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes } from "./spotify";
+import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId } from "./spotify";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -41,7 +41,14 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.message });
       }
-      const bookmark = await storage.createBookmark(parsed.data);
+      const data = { ...parsed.data };
+      if (data.episodeId.startsWith('itunes-')) {
+        const spotifyId = await resolveSpotifyEpisodeId(data.episodeName, data.showName);
+        if (spotifyId) {
+          data.episodeId = spotifyId;
+        }
+      }
+      const bookmark = await storage.createBookmark(data);
       res.status(201).json(bookmark);
     } catch (error) {
       console.error("Error creating bookmark:", error);

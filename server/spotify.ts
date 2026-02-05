@@ -139,6 +139,49 @@ async function searchiTunesFallback(query: string): Promise<SpotifyEpisode[]> {
   }));
 }
 
+export async function resolveSpotifyEpisodeId(episodeName: string, showName: string): Promise<string | null> {
+  try {
+    const { accessToken } = await getAccessToken();
+    const query = `${episodeName} ${showName}`;
+    
+    const response = await fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=episode&limit=5`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      console.log(`Spotify resolve failed: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    const episodes = data.episodes?.items || [];
+    
+    if (episodes.length === 0) return null;
+    
+    const normalizedName = episodeName.toLowerCase().trim();
+    const exactMatch = episodes.find((ep: any) => 
+      ep.name.toLowerCase().trim() === normalizedName
+    );
+    if (exactMatch) return exactMatch.id;
+    
+    const closeMatch = episodes.find((ep: any) =>
+      ep.name.toLowerCase().includes(normalizedName) || 
+      normalizedName.includes(ep.name.toLowerCase())
+    );
+    if (closeMatch) return closeMatch.id;
+    
+    return episodes[0].id;
+  } catch (error) {
+    console.log("Failed to resolve Spotify episode ID:", (error as Error).message);
+    return null;
+  }
+}
+
 export async function searchEpisodes(query: string): Promise<SpotifyEpisode[]> {
   try {
     return await searchSpotifyDirect(query);

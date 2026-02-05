@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { bookmarks } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
+import { resolveSpotifyEpisodeId } from "./spotify";
 
 export async function seedDatabase() {
   const existingBookmarks = await db.select().from(bookmarks).limit(1);
@@ -14,7 +15,7 @@ export async function seedDatabase() {
 
   const sampleBookmarks = [
     {
-      episodeId: "itunes-sample-1",
+      episodeId: "placeholder-1",
       episodeName: "The Power of Deep Work in the Age of Distraction",
       showName: "The Knowledge Project with Shane Parrish",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a8d2b5e2e5a0a8e7c47b6d2d9",
@@ -23,7 +24,7 @@ export async function seedDatabase() {
       note: "Great insights on focused work and eliminating distractions. Cal Newport's framework for productivity.",
     },
     {
-      episodeId: "itunes-sample-2",
+      episodeId: "placeholder-2",
       episodeName: "How to Build Products Users Love",
       showName: "How I Built This with Guy Raz",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a22a9f3c6b7bb0dc14a4b3b5c",
@@ -32,7 +33,7 @@ export async function seedDatabase() {
       note: "Key takeaways on product-market fit and early customer feedback loops.",
     },
     {
-      episodeId: "itunes-sample-3",
+      episodeId: "placeholder-3",
       episodeName: "The Science of Habits and Behavior Change",
       showName: "Huberman Lab",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a4e7e15f3c5f19a8e4b6c2d8f",
@@ -41,7 +42,7 @@ export async function seedDatabase() {
       note: "Neuroscience behind habit formation. Dopamine reward prediction error explanation.",
     },
     {
-      episodeId: "itunes-sample-4",
+      episodeId: "placeholder-4",
       episodeName: "Mastering the Art of Negotiation",
       showName: "The Tim Ferriss Show",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a1e2c8a5d9f3e4b7c6a8d2e5f",
@@ -53,4 +54,33 @@ export async function seedDatabase() {
 
   await db.insert(bookmarks).values(sampleBookmarks);
   console.log("Seeded database with sample bookmarks");
+}
+
+export async function migrateUnresolvedEpisodeIds() {
+  try {
+    const allBookmarks = await db.select().from(bookmarks);
+    const unresolvedBookmarks = allBookmarks.filter(b => 
+      b.episodeId.startsWith('itunes-') || b.episodeId.startsWith('placeholder-')
+    );
+
+    if (unresolvedBookmarks.length === 0) {
+      return;
+    }
+
+    console.log(`Resolving ${unresolvedBookmarks.length} episode IDs to Spotify IDs...`);
+
+    for (const bookmark of unresolvedBookmarks) {
+      const spotifyId = await resolveSpotifyEpisodeId(bookmark.episodeName, bookmark.showName);
+      if (spotifyId) {
+        await db.update(bookmarks)
+          .set({ episodeId: spotifyId })
+          .where(eq(bookmarks.id, bookmark.id));
+        console.log(`Resolved "${bookmark.episodeName}" -> ${spotifyId}`);
+      } else {
+        console.log(`Could not resolve "${bookmark.episodeName}" to a Spotify ID`);
+      }
+    }
+  } catch (error) {
+    console.log("Episode ID migration skipped:", (error as Error).message);
+  }
 }

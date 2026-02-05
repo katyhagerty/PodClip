@@ -62,6 +62,8 @@ app.use((req, res, next) => {
 
 (async () => {
   await seedDatabase();
+  const { migrateUnresolvedEpisodeIds } = await import("./seed");
+  migrateUnresolvedEpisodeIds();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
