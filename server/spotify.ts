@@ -48,11 +48,8 @@ async function getAccessToken(): Promise<TokenData> {
   connectionSettings = connData.items?.[0];
   
   if (!connectionSettings) {
-    console.error('Spotify connector response:', JSON.stringify(connData, null, 2));
     throw new Error('Spotify not connected. No connection found.');
   }
-  
-  console.log('Spotify connector keys:', Object.keys(connectionSettings.settings || {}));
   
   const refreshToken =
     connectionSettings?.settings?.oauth?.credentials?.refresh_token;
@@ -62,8 +59,6 @@ async function getAccessToken(): Promise<TokenData> {
   const expiresIn = connectionSettings?.settings?.oauth?.credentials?.expires_in;
 
   if (!accessToken || !clientId || !refreshToken) {
-    console.error('Missing Spotify credentials - accessToken:', !!accessToken, 'clientId:', !!clientId, 'refreshToken:', !!refreshToken);
-    console.error('Settings structure:', JSON.stringify(Object.keys(connectionSettings.settings || {})));
     throw new Error('Spotify not connected. Please reconnect your Spotify account.');
   }
 
@@ -92,38 +87,69 @@ export interface SpotifyEpisode {
   durationMs: number;
 }
 
+async function searchSpotifyDirect(query: string): Promise<SpotifyEpisode[]> {
+  const { accessToken } = await getAccessToken();
+  
+  const response = await fetch(
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=episode&limit=20`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      }
+    }
+  );
+  
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Spotify API error: ${response.status} - ${errorBody}`);
+  }
+  
+  const data = await response.json();
+  const episodes = data.episodes?.items || [];
+  
+  return episodes.map((episode: any) => ({
+    id: episode.id,
+    name: episode.name,
+    showName: episode.show?.name || 'Unknown Show',
+    showImageUrl: episode.images?.[0]?.url || episode.show?.images?.[0]?.url || null,
+    description: episode.description || '',
+    durationMs: episode.duration_ms,
+  }));
+}
+
+async function searchiTunesFallback(query: string): Promise<SpotifyEpisode[]> {
+  const response = await fetch(
+    `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=podcast&entity=podcastEpisode&limit=20`
+  );
+  
+  if (!response.ok) {
+    throw new Error(`iTunes API error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  const results = data.results || [];
+  
+  return results.map((item: any) => ({
+    id: `itunes-${item.trackId}`,
+    name: item.trackName || 'Unknown Episode',
+    showName: item.collectionName || 'Unknown Show',
+    showImageUrl: item.artworkUrl600 || item.artworkUrl100 || null,
+    description: item.description || item.shortDescription || '',
+    durationMs: item.trackTimeMillis || 0,
+  }));
+}
+
 export async function searchEpisodes(query: string): Promise<SpotifyEpisode[]> {
   try {
-    const { accessToken } = await getAccessToken();
-    
-    const response = await fetch(
-      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=episode&limit=20`,
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        }
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error(`Spotify API error: ${response.status}`);
+    return await searchSpotifyDirect(query);
+  } catch (spotifyError) {
+    console.log("Spotify search failed, falling back to iTunes:", (spotifyError as Error).message);
+    try {
+      return await searchiTunesFallback(query);
+    } catch (itunesError) {
+      console.error("iTunes fallback also failed:", itunesError);
+      throw spotifyError;
     }
-    
-    const data = await response.json();
-    const episodes = data.episodes?.items || [];
-    
-    return episodes.map((episode: any) => ({
-      id: episode.id,
-      name: episode.name,
-      showName: episode.show?.name || 'Unknown Show',
-      showImageUrl: episode.images?.[0]?.url || episode.show?.images?.[0]?.url || null,
-      description: episode.description || '',
-      durationMs: episode.duration_ms,
-    }));
-  } catch (error) {
-    console.error("Error searching Spotify episodes:", error);
-    throw error;
   }
 }
 
@@ -165,7 +191,6 @@ export async function getRecentlyPlayedEpisodes(): Promise<SpotifyEpisode[]> {
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
         }
       }
     );

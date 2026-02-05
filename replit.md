@@ -54,8 +54,9 @@ All API routes are prefixed with `/api/`:
 - `POST /api/bookmarks` - Create bookmark
 - `PUT /api/bookmarks/:id` - Update bookmark
 - `DELETE /api/bookmarks/:id` - Delete bookmark
-- `GET /api/spotify/search` - Search Spotify episodes
-- `GET /api/spotify/saved-shows` - Get user's saved podcast shows
+- `GET /api/spotify/search?q=query` - Search podcast episodes (Spotify with iTunes fallback)
+- `GET /api/spotify/shows` - Get user's saved podcast shows
+- `GET /api/spotify/recent` - Get recently played episodes (falls back to saved shows)
 
 ### Build System
 - Development: Vite dev server with Express API middleware
@@ -66,9 +67,11 @@ All API routes are prefixed with `/api/`:
 
 ### Spotify Integration
 The application integrates with Spotify using `@spotify/web-api-ts-sdk` and Replit's connector system for OAuth authentication. This enables:
-- Searching podcast episodes
-- Fetching user's saved shows
+- Searching podcast episodes (with iTunes/Apple Podcasts API fallback when Spotify API is unavailable)
+- Fetching user's saved shows and recently played episodes
 - Deep linking to specific timestamps in Spotify
+
+**Important**: The Spotify connector app may be in development mode, which can cause 403 errors. The search function automatically falls back to the iTunes Search API when this happens, ensuring podcast search always works.
 
 ### Database
 - PostgreSQL database (requires `DATABASE_URL` environment variable)
