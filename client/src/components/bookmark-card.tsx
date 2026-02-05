@@ -15,7 +15,7 @@ export function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) 
   const isSpotifyId = bookmark.episodeId && !bookmark.episodeId.startsWith('itunes-');
   const spotifyUrl = isSpotifyId
     ? `https://open.spotify.com/episode/${bookmark.episodeId}`
-    : `https://open.spotify.com/search/${encodeURIComponent(bookmark.episodeName + ' ' + bookmark.showName)}`;
+    : `https://open.spotify.com/search/${encodeURIComponent(bookmark.episodeName)}/episodes`;
 
   return (
     <Card className="group hover-elevate overflow-visible" data-testid={`card-bookmark-${bookmark.id}`}>
