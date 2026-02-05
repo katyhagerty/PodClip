@@ -14,7 +14,7 @@ export async function seedDatabase() {
 
   const sampleBookmarks = [
     {
-      episodeId: "5VJDymnLdLQrxl9v3AqzL1",
+      episodeId: "itunes-sample-1",
       episodeName: "The Power of Deep Work in the Age of Distraction",
       showName: "The Knowledge Project with Shane Parrish",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a8d2b5e2e5a0a8e7c47b6d2d9",
@@ -23,7 +23,7 @@ export async function seedDatabase() {
       note: "Great insights on focused work and eliminating distractions. Cal Newport's framework for productivity.",
     },
     {
-      episodeId: "1cR0KkP7qJ0QnT3oTqxlDk",
+      episodeId: "itunes-sample-2",
       episodeName: "How to Build Products Users Love",
       showName: "How I Built This with Guy Raz",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a22a9f3c6b7bb0dc14a4b3b5c",
@@ -32,7 +32,7 @@ export async function seedDatabase() {
       note: "Key takeaways on product-market fit and early customer feedback loops.",
     },
     {
-      episodeId: "3r4KoV8dJnPz5V5yH2GxNm",
+      episodeId: "itunes-sample-3",
       episodeName: "The Science of Habits and Behavior Change",
       showName: "Huberman Lab",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a4e7e15f3c5f19a8e4b6c2d8f",
@@ -41,7 +41,7 @@ export async function seedDatabase() {
       note: "Neuroscience behind habit formation. Dopamine reward prediction error explanation.",
     },
     {
-      episodeId: "7pKfP3LqJtRz8VzM4N5hQk",
+      episodeId: "itunes-sample-4",
       episodeName: "Mastering the Art of Negotiation",
       showName: "The Tim Ferriss Show",
       showImageUrl: "https://i.scdn.co/image/ab6765630000ba8a1e2c8a5d9f3e4b7c6a8d2e5f",

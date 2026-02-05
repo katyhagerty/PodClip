@@ -12,7 +12,10 @@ interface BookmarkCardProps {
 }
 
 export function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) {
-  const spotifyUrl = `https://open.spotify.com/episode/${bookmark.episodeId}`;
+  const isSpotifyId = bookmark.episodeId && !bookmark.episodeId.startsWith('itunes-');
+  const spotifyUrl = isSpotifyId
+    ? `https://open.spotify.com/episode/${bookmark.episodeId}`
+    : `https://open.spotify.com/search/${encodeURIComponent(bookmark.episodeName + ' ' + bookmark.showName)}`;
 
   return (
     <Card className="group hover-elevate overflow-visible" data-testid={`card-bookmark-${bookmark.id}`}>
@@ -32,7 +35,7 @@ export function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) 
               </div>
             )}
             <a
-              href={`${spotifyUrl}?t=${Math.floor(bookmark.timestampMs / 1000)}`}
+              href={isSpotifyId ? `${spotifyUrl}?t=${Math.floor(bookmark.timestampMs / 1000)}` : spotifyUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md"
