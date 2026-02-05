@@ -240,10 +240,10 @@ export function BookmarkDialog({
               name="transcript"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Transcript (optional)</FormLabel>
+                  <FormLabel>Clip Transcript (optional)</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Paste the transcript of this clip..."
+                      placeholder="Paste just the transcript for this clipped moment..."
                       className="resize-vertical font-mono text-xs"
                       rows={5}
                       {...field}
