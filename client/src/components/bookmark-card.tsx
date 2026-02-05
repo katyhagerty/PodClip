@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Trash2, Edit2, Clock, ExternalLink } from "lucide-react";
+import { Play, Trash2, Edit2, Clock, ExternalLink, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { formatTime, formatRelativeDate } from "@/lib/utils";
 import type { Bookmark } from "@shared/schema";
 
@@ -12,6 +13,7 @@ interface BookmarkCardProps {
 }
 
 export function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) {
+  const [showTranscript, setShowTranscript] = useState(false);
   const isSpotifyId = bookmark.episodeId && !bookmark.episodeId.startsWith('itunes-');
   const spotifyUrl = isSpotifyId
     ? `https://open.spotify.com/episode/${bookmark.episodeId}`
@@ -93,6 +95,30 @@ export function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) 
               <p className="text-sm text-muted-foreground mt-2 line-clamp-2" data-testid={`text-note-${bookmark.id}`}>
                 {bookmark.note}
               </p>
+            )}
+
+            {bookmark.transcript && (
+              <div className="mt-2" data-testid={`transcript-section-${bookmark.id}`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowTranscript(!showTranscript)}
+                  className="h-auto px-1 py-0.5 text-xs text-muted-foreground gap-1"
+                  data-testid={`button-toggle-transcript-${bookmark.id}`}
+                >
+                  <FileText className="w-3 h-3" />
+                  <span>Transcript</span>
+                  {showTranscript ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </Button>
+                {showTranscript && (
+                  <div
+                    className="mt-2 p-3 rounded-md bg-muted/50 text-xs text-muted-foreground font-mono whitespace-pre-wrap max-h-48 overflow-y-auto"
+                    data-testid={`text-transcript-${bookmark.id}`}
+                  >
+                    {bookmark.transcript}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="flex items-center justify-between mt-3">

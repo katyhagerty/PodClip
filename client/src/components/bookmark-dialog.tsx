@@ -31,6 +31,7 @@ const bookmarkFormSchema = z.object({
   timestamp: z.string().regex(/^\d+:\d{2}(:\d{2})?$/, "Use format MM:SS or HH:MM:SS"),
   duration: z.string().optional(),
   note: z.string().optional(),
+  transcript: z.string().optional(),
 });
 
 type BookmarkFormValues = z.infer<typeof bookmarkFormSchema>;
@@ -69,6 +70,7 @@ export function BookmarkDialog({
       timestamp: "0:00",
       duration: "",
       note: "",
+      transcript: "",
     },
   });
 
@@ -82,6 +84,7 @@ export function BookmarkDialog({
         timestamp: formatTime(bookmark.timestampMs),
         duration: bookmark.durationMs ? formatTime(bookmark.durationMs) : "",
         note: bookmark.note || "",
+        transcript: bookmark.transcript || "",
       });
     } else if (prefilledEpisode) {
       form.reset({
@@ -92,6 +95,7 @@ export function BookmarkDialog({
         timestamp: "0:00",
         duration: "",
         note: "",
+        transcript: "",
       });
     } else {
       form.reset({
@@ -102,6 +106,7 @@ export function BookmarkDialog({
         timestamp: "0:00",
         duration: "",
         note: "",
+        transcript: "",
       });
     }
   }, [bookmark, prefilledEpisode, form]);
@@ -115,13 +120,14 @@ export function BookmarkDialog({
       timestampMs: parseTimeToMs(values.timestamp),
       durationMs: values.duration ? parseTimeToMs(values.duration) : null,
       note: values.note || null,
+      transcript: values.transcript || null,
     };
     onSubmit(data);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="dialog-bookmark">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" data-testid="dialog-bookmark">
         <DialogHeader>
           <DialogTitle data-testid="text-dialog-title">
             {isEditing ? "Edit Bookmark" : "Add Bookmark"}
@@ -222,6 +228,26 @@ export function BookmarkDialog({
                       rows={3}
                       {...field}
                       data-testid="input-note"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="transcript"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Transcript (optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Paste the transcript of this clip..."
+                      className="resize-vertical font-mono text-xs"
+                      rows={5}
+                      {...field}
+                      data-testid="input-transcript"
                     />
                   </FormControl>
                   <FormMessage />
