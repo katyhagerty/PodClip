@@ -34,7 +34,7 @@ async function getAccessToken(): Promise<TokenData> {
     throw new Error('X_REPLIT_TOKEN not found for repl/depl');
   }
 
-  connectionSettings = await fetch(
+  const connResponse = await fetch(
     'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=spotify',
     {
       headers: {
@@ -42,8 +42,18 @@ async function getAccessToken(): Promise<TokenData> {
         'X_REPLIT_TOKEN': xReplitToken
       }
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
+  );
+  
+  const connData = await connResponse.json();
+  connectionSettings = connData.items?.[0];
+  
+  if (!connectionSettings) {
+    console.error('Spotify connector response:', JSON.stringify(connData, null, 2));
+    throw new Error('Spotify not connected. No connection found.');
+  }
+  
+  console.log('Spotify connector keys:', Object.keys(connectionSettings.settings || {}));
+  
   const refreshToken =
     connectionSettings?.settings?.oauth?.credentials?.refresh_token;
   const accessToken = connectionSettings?.settings?.access_token || 
@@ -51,7 +61,9 @@ async function getAccessToken(): Promise<TokenData> {
   const clientId = connectionSettings?.settings?.oauth?.credentials?.client_id;
   const expiresIn = connectionSettings?.settings?.oauth?.credentials?.expires_in;
 
-  if (!connectionSettings || !accessToken || !clientId || !refreshToken) {
+  if (!accessToken || !clientId || !refreshToken) {
+    console.error('Missing Spotify credentials - accessToken:', !!accessToken, 'clientId:', !!clientId, 'refreshToken:', !!refreshToken);
+    console.error('Settings structure:', JSON.stringify(Object.keys(connectionSettings.settings || {})));
     throw new Error('Spotify not connected. Please reconnect your Spotify account.');
   }
 
