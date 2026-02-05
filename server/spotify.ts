@@ -85,6 +85,7 @@ export interface SpotifyEpisode {
   showImageUrl: string | null;
   description: string;
   durationMs: number;
+  audioUrl: string | null;
 }
 
 async function searchSpotifyDirect(query: string): Promise<SpotifyEpisode[]> {
@@ -114,6 +115,7 @@ async function searchSpotifyDirect(query: string): Promise<SpotifyEpisode[]> {
     showImageUrl: episode.images?.[0]?.url || episode.show?.images?.[0]?.url || null,
     description: episode.description || '',
     durationMs: episode.duration_ms,
+    audioUrl: episode.audio_preview_url || null,
   }));
 }
 
@@ -136,6 +138,7 @@ async function searchiTunesFallback(query: string): Promise<SpotifyEpisode[]> {
     showImageUrl: item.artworkUrl600 || item.artworkUrl100 || null,
     description: item.description || item.shortDescription || '',
     durationMs: item.trackTimeMillis || 0,
+    audioUrl: item.episodeUrl || null,
   }));
 }
 
@@ -214,6 +217,7 @@ export async function getSavedShows(): Promise<SpotifyEpisode[]> {
           showImageUrl: episode.images?.[0]?.url || item.show.images?.[0]?.url || null,
           description: episode.description,
           durationMs: episode.duration_ms,
+          audioUrl: (episode as any).audio_preview_url || null,
         });
       }
     }
@@ -257,6 +261,7 @@ export async function getRecentlyPlayedEpisodes(): Promise<SpotifyEpisode[]> {
           showImageUrl: episode.images?.[0]?.url || episode.show?.images?.[0]?.url || null,
           description: episode.description || '',
           durationMs: episode.duration_ms,
+          audioUrl: episode.audio_preview_url || null,
         });
       }
     }

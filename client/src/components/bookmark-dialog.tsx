@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -21,6 +21,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { formatTime, parseTimeToMs } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
+import { Wand2, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { Bookmark, InsertBookmark } from "@shared/schema";
 
 const bookmarkFormSchema = z.object({
@@ -47,6 +50,7 @@ interface BookmarkDialogProps {
     episodeName: string;
     showName: string;
     showImageUrl?: string;
+    audioUrl?: string;
   };
 }
 
@@ -59,6 +63,8 @@ export function BookmarkDialog({
   prefilledEpisode,
 }: BookmarkDialogProps) {
   const isEditing = !!bookmark;
+  const { toast } = useToast();
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
   const form = useForm<BookmarkFormValues>({
     resolver: zodResolver(bookmarkFormSchema),
@@ -110,6 +116,50 @@ export function BookmarkDialog({
       });
     }
   }, [bookmark, prefilledEpisode, form]);
+
+  const audioUrl = prefilledEpisode?.audioUrl;
+
+  const handleGenerateTranscript = async () => {
+    const timestamp = form.getValues("timestamp");
+    const duration = form.getValues("duration");
+
+    if (!audioUrl) {
+      toast({
+        title: "No audio available",
+        description: "This episode doesn't have an audio URL available for transcription.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timestampMs = parseTimeToMs(timestamp);
+    const durationMs = duration ? parseTimeToMs(duration) : 60000;
+
+    setIsTranscribing(true);
+    try {
+      const response = await apiRequest("POST", "/api/transcribe", {
+        audioUrl,
+        timestampMs,
+        durationMs,
+      });
+      const data = await response.json();
+      if (data.transcript) {
+        form.setValue("transcript", data.transcript);
+        toast({
+          title: "Transcript generated",
+          description: "The clip transcript has been filled in for you.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Transcription failed",
+        description: "Could not generate the transcript. Try adjusting the timestamp or duration.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
 
   const handleSubmit = (values: BookmarkFormValues) => {
     const data: InsertBookmark = {
@@ -240,10 +290,32 @@ export function BookmarkDialog({
               name="transcript"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Clip Transcript (optional)</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Clip Transcript (optional)</FormLabel>
+                    {audioUrl && !isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleGenerateTranscript}
+                        disabled={isTranscribing}
+                        className="h-auto px-2 py-1 text-xs gap-1"
+                        data-testid="button-generate-transcript"
+                      >
+                        {isTranscribing ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Wand2 className="w-3 h-3" />
+                        )}
+                        {isTranscribing ? "Generating..." : "Generate"}
+                      </Button>
+                    )}
+                  </div>
                   <FormControl>
                     <Textarea
-                      placeholder="Paste just the transcript for this clipped moment..."
+                      placeholder={audioUrl && !isEditing
+                        ? "Click Generate to auto-transcribe, or paste your own..."
+                        : "Paste just the transcript for this clipped moment..."}
                       className="resize-vertical font-mono text-xs"
                       rows={5}
                       {...field}

@@ -20,6 +20,7 @@ interface Episode {
   showImageUrl: string | null;
   description: string;
   durationMs: number;
+  audioUrl: string | null;
 }
 
 interface EpisodeSearchDialogProps {
@@ -30,6 +31,7 @@ interface EpisodeSearchDialogProps {
     episodeName: string;
     showName: string;
     showImageUrl?: string;
+    audioUrl?: string;
   }) => void;
 }
 
@@ -81,6 +83,7 @@ export function EpisodeSearchDialog({
       episodeName: episode.name,
       showName: episode.showName,
       showImageUrl: episode.showImageUrl || undefined,
+      audioUrl: episode.audioUrl || undefined,
     });
     onOpenChange(false);
     setSearchQuery("");

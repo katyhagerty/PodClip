@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertBookmarkSchema } from "@shared/schema";
 import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId } from "./spotify";
+import { transcribeClip } from "./transcribe";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -133,6 +134,60 @@ export async function registerRoutes(
         console.error("Error fetching saved shows fallback:", fallbackError);
         res.status(500).json({ error: "Failed to fetch episodes" });
       }
+    }
+  });
+
+  app.post("/api/transcribe", async (req, res) => {
+    try {
+      const { audioUrl, timestampMs, durationMs } = req.body;
+      if (!audioUrl || typeof audioUrl !== "string") {
+        return res.status(400).json({ error: "audioUrl is required" });
+      }
+
+      let parsed: URL;
+      try {
+        parsed = new URL(audioUrl);
+      } catch {
+        return res.status(400).json({ error: "Invalid audio URL" });
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return res.status(400).json({ error: "Only HTTP/HTTPS URLs are allowed" });
+      }
+      const allowedHosts = [
+        "audio.itunes.apple.com",
+        "podcasts.apple.com",
+        "p.scdn.co",
+        "podz-content.com",
+        "traffic.libsyn.com",
+        "traffic.megaphone.fm",
+        "cdn.simplecast.com",
+        "media.blubrry.com",
+        "dts.podtrac.com",
+        "chtbl.com",
+        "pdst.fm",
+        "www.buzzsprout.com",
+        "anchor.fm",
+        "feeds.soundcloud.com",
+        "rss.art19.com",
+        "play.podtrac.com",
+        "chrt.fm",
+        "op3.dev",
+      ];
+      const hostname = parsed.hostname;
+      const isAllowed = allowedHosts.some(h => hostname === h || hostname.endsWith("." + h));
+      if (!isAllowed) {
+        return res.status(400).json({ error: "Audio URL host is not supported for transcription" });
+      }
+
+      if (typeof timestampMs !== "number" || timestampMs < 0) {
+        return res.status(400).json({ error: "Valid timestampMs is required" });
+      }
+      const clipDuration = typeof durationMs === "number" && durationMs > 0 ? durationMs : 60000;
+      const transcript = await transcribeClip(audioUrl, timestampMs, clipDuration);
+      res.json({ transcript });
+    } catch (error) {
+      console.error("Error transcribing clip:", error);
+      res.status(500).json({ error: "Failed to transcribe the clip. Make sure the timestamp and duration are within the episode length." });
     }
   });
 

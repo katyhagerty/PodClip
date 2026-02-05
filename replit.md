@@ -34,9 +34,10 @@ The frontend is organized under `client/src/` with:
 - **External Integration**: Spotify Web API via Replit Connectors for OAuth
 
 Key server modules:
-- `server/routes.ts` - API endpoint definitions for bookmarks and Spotify search
+- `server/routes.ts` - API endpoint definitions for bookmarks, Spotify search, and transcription
 - `server/storage.ts` - Database access layer implementing storage interface
 - `server/spotify.ts` - Spotify API client using Replit's connector system
+- `server/transcribe.ts` - Audio clip transcription using ffmpeg + OpenAI speech-to-text
 - `server/db.ts` - Drizzle database connection pool
 
 ### Data Storage
@@ -57,6 +58,7 @@ All API routes are prefixed with `/api/`:
 - `GET /api/spotify/search?q=query` - Search podcast episodes (Spotify with iTunes fallback)
 - `GET /api/spotify/shows` - Get user's saved podcast shows
 - `GET /api/spotify/recent` - Get recently played episodes (falls back to saved shows)
+- `POST /api/transcribe` - Transcribe a podcast clip (takes audioUrl, timestampMs, durationMs; returns transcript text)
 
 ### Build System
 - Development: Vite dev server with Express API middleware
@@ -72,6 +74,13 @@ The application integrates with Spotify using `@spotify/web-api-ts-sdk` and Repl
 - Deep linking to specific timestamps in Spotify
 
 **Important**: The Spotify connector app may be in development mode, which can cause 403 errors. The search function automatically falls back to the iTunes Search API when this happens, ensuring podcast search always works.
+
+### AI Transcription
+The application uses Replit AI Integrations (OpenAI-compatible) for speech-to-text transcription:
+- `server/transcribe.ts` downloads podcast audio via ffmpeg, extracts a clip at a given timestamp/duration, and sends it to OpenAI's `gpt-4o-mini-transcribe` model
+- The `/api/transcribe` endpoint has a URL allowlist to prevent SSRF attacks (only known podcast CDN hosts are allowed)
+- The bookmark dialog includes a "Generate" button that triggers transcription when an audio URL is available from the episode search results
+- Audio URLs come from iTunes (`episodeUrl` field) or Spotify (`audio_preview_url` field)
 
 ### Database
 - PostgreSQL database (requires `DATABASE_URL` environment variable)

@@ -25,6 +25,7 @@ export default function Home() {
     episodeName: string;
     showName: string;
     showImageUrl?: string;
+    audioUrl?: string;
   } | undefined>();
 
   const { data: bookmarks, isLoading } = useQuery<BookmarkType[]>({
@@ -107,6 +108,7 @@ export default function Home() {
     episodeName: string;
     showName: string;
     showImageUrl?: string;
+    audioUrl?: string;
   }) => {
     setPrefilledEpisode(episode);
     setBookmarkDialogOpen(true);
