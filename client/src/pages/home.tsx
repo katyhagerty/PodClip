@@ -128,7 +128,8 @@ export default function Home() {
     return (
       bookmark.episodeName.toLowerCase().includes(query) ||
       bookmark.showName.toLowerCase().includes(query) ||
-      bookmark.note?.toLowerCase().includes(query)
+      bookmark.note?.toLowerCase().includes(query) ||
+      bookmark.transcript?.toLowerCase().includes(query)
     );
   });
 

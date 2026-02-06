@@ -119,6 +119,33 @@ export function BookmarkDialog({
 
   const audioUrl = prefilledEpisode?.audioUrl || bookmark?.audioUrl;
 
+  useEffect(() => {
+    if (prefilledEpisode?.audioUrl && !bookmark) {
+      const autoTranscribe = async () => {
+        const timestampMs = parseTimeToMs(form.getValues("timestamp") || "0:00");
+        const durationStr = form.getValues("duration");
+        const durationMs = durationStr ? parseTimeToMs(durationStr) : 60000;
+
+        setIsTranscribing(true);
+        try {
+          const response = await apiRequest("POST", "/api/transcribe", {
+            audioUrl: prefilledEpisode.audioUrl,
+            timestampMs,
+            durationMs,
+          });
+          const data = await response.json();
+          if (data.transcript) {
+            form.setValue("transcript", data.transcript);
+          }
+        } catch {
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+      autoTranscribe();
+    }
+  }, [prefilledEpisode, bookmark, form]);
+
   const handleGenerateTranscript = async () => {
     const timestamp = form.getValues("timestamp");
     const duration = form.getValues("duration");
