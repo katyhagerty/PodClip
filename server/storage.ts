@@ -3,6 +3,7 @@ import {
   type InsertUser, 
   type Bookmark, 
   type InsertBookmark, 
+  type PatchBookmark,
   users, 
   bookmarks 
 } from "@shared/schema";
@@ -18,6 +19,7 @@ export interface IStorage {
   getBookmark(id: string): Promise<Bookmark | undefined>;
   createBookmark(bookmark: InsertBookmark): Promise<Bookmark>;
   updateBookmark(id: string, bookmark: InsertBookmark): Promise<Bookmark | undefined>;
+  patchBookmark(id: string, fields: PatchBookmark): Promise<Bookmark | undefined>;
   deleteBookmark(id: string): Promise<boolean>;
 }
 
@@ -55,6 +57,15 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db
       .update(bookmarks)
       .set(bookmark)
+      .where(eq(bookmarks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async patchBookmark(id: string, fields: PatchBookmark): Promise<Bookmark | undefined> {
+    const [updated] = await db
+      .update(bookmarks)
+      .set(fields)
       .where(eq(bookmarks.id, id))
       .returning();
     return updated;

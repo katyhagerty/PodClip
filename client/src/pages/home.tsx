@@ -10,8 +10,9 @@ import { EpisodeSearchDialog } from "@/components/episode-search-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Headphones, Bookmark } from "lucide-react";
+import { Plus, Search, Headphones, Bookmark, Radio } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
+import { Link } from "wouter";
 import type { Bookmark as BookmarkType, InsertBookmark } from "@shared/schema";
 
 export default function Home() {
@@ -32,16 +33,40 @@ export default function Home() {
     queryKey: ["/api/bookmarks"],
   });
 
+  const triggerTranscription = async (bookmarkId: string, audioUrl: string, timestampMs: number, durationMs: number) => {
+    try {
+      const response = await apiRequest("POST", "/api/transcribe", {
+        audioUrl,
+        timestampMs,
+        durationMs,
+      });
+      const data = await response.json();
+      if (data.transcript) {
+        await apiRequest("PATCH", `/api/bookmarks/${bookmarkId}`, {
+          transcript: data.transcript,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/bookmarks"] });
+      }
+    } catch {
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: InsertBookmark) => apiRequest("POST", "/api/bookmarks", data),
-    onSuccess: () => {
+    onSuccess: async (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookmarks"] });
       setBookmarkDialogOpen(false);
-      setPrefilledEpisode(undefined);
+      const bookmark = await response.json();
       toast({
         title: "Clip saved!",
-        description: "Your podcast moment has been bookmarked.",
+        description: bookmark.audioUrl
+          ? "Your clip has been saved. Transcript is generating..."
+          : "Your podcast moment has been bookmarked.",
       });
+      setPrefilledEpisode(undefined);
+      if (bookmark.audioUrl && bookmark.id) {
+        triggerTranscription(bookmark.id, bookmark.audioUrl, bookmark.timestampMs, bookmark.durationMs || 60000);
+      }
     },
     onError: () => {
       toast({
@@ -148,6 +173,12 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/now-playing">
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-now-playing">
+                <Radio className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Now Playing</span>
+              </Button>
+            </Link>
             <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 text-muted-foreground text-xs">
               <SiSpotify className="w-3 h-3 text-[#1DB954]" />
               <span className="hidden sm:inline">Connected</span>

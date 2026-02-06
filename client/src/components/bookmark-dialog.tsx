@@ -119,33 +119,6 @@ export function BookmarkDialog({
 
   const audioUrl = prefilledEpisode?.audioUrl || bookmark?.audioUrl;
 
-  useEffect(() => {
-    if (prefilledEpisode?.audioUrl && !bookmark) {
-      const autoTranscribe = async () => {
-        const timestampMs = parseTimeToMs(form.getValues("timestamp") || "0:00");
-        const durationStr = form.getValues("duration");
-        const durationMs = durationStr ? parseTimeToMs(durationStr) : 60000;
-
-        setIsTranscribing(true);
-        try {
-          const response = await apiRequest("POST", "/api/transcribe", {
-            audioUrl: prefilledEpisode.audioUrl,
-            timestampMs,
-            durationMs,
-          });
-          const data = await response.json();
-          if (data.transcript) {
-            form.setValue("transcript", data.transcript);
-          }
-        } catch {
-        } finally {
-          setIsTranscribing(false);
-        }
-      };
-      autoTranscribe();
-    }
-  }, [prefilledEpisode, bookmark, form]);
-
   const handleGenerateTranscript = async () => {
     const timestamp = form.getValues("timestamp");
     const duration = form.getValues("duration");
@@ -313,47 +286,49 @@ export function BookmarkDialog({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="transcript"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center justify-between">
-                    <FormLabel>Clip Transcript (optional)</FormLabel>
-                    {audioUrl && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleGenerateTranscript}
-                        disabled={isTranscribing}
-                        className="h-auto px-2 py-1 text-xs gap-1"
-                        data-testid="button-generate-transcript"
-                      >
-                        {isTranscribing ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Wand2 className="w-3 h-3" />
-                        )}
-                        {isTranscribing ? "Generating..." : "Generate"}
-                      </Button>
-                    )}
-                  </div>
-                  <FormControl>
-                    <Textarea
-                      placeholder={audioUrl
-                        ? "Click Generate to auto-transcribe, or paste your own..."
-                        : "Paste just the transcript for this clipped moment..."}
-                      className="resize-vertical font-mono text-xs"
-                      rows={5}
-                      {...field}
-                      data-testid="input-transcript"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {isEditing && (
+              <FormField
+                control={form.control}
+                name="transcript"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Clip Transcript</FormLabel>
+                      {audioUrl && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleGenerateTranscript}
+                          disabled={isTranscribing}
+                          className="h-auto px-2 py-1 text-xs gap-1"
+                          data-testid="button-generate-transcript"
+                        >
+                          {isTranscribing ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Wand2 className="w-3 h-3" />
+                          )}
+                          {isTranscribing ? "Generating..." : "Regenerate"}
+                        </Button>
+                      )}
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        placeholder={audioUrl
+                          ? "Click Regenerate to update the transcript..."
+                          : "Paste the transcript for this clipped moment..."}
+                        className="resize-vertical font-mono text-xs"
+                        rows={5}
+                        {...field}
+                        data-testid="input-transcript"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

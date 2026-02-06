@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBookmarkSchema } from "@shared/schema";
-import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId } from "./spotify";
+import { insertBookmarkSchema, patchBookmarkSchema } from "@shared/schema";
+import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId, getCurrentPlayback, pausePlayback, resumePlayback, seekPlayback } from "./spotify";
 import { transcribeClip } from "./transcribe";
 
 export async function registerRoutes(
@@ -75,6 +75,23 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/bookmarks/:id", async (req, res) => {
+    try {
+      const parsed = patchBookmarkSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      const bookmark = await storage.patchBookmark(req.params.id, parsed.data);
+      if (!bookmark) {
+        return res.status(404).json({ error: "Bookmark not found" });
+      }
+      res.json(bookmark);
+    } catch (error) {
+      console.error("Error patching bookmark:", error);
+      res.status(500).json({ error: "Failed to update bookmark" });
+    }
+  });
+
   // Delete bookmark
   app.delete("/api/bookmarks/:id", async (req, res) => {
     try {
@@ -134,6 +151,50 @@ export async function registerRoutes(
         console.error("Error fetching saved shows fallback:", fallbackError);
         res.status(500).json({ error: "Failed to fetch episodes" });
       }
+    }
+  });
+
+  app.get("/api/spotify/player", async (req, res) => {
+    try {
+      const playback = await getCurrentPlayback();
+      res.json(playback);
+    } catch (error) {
+      console.error("Error getting playback state:", error);
+      res.status(500).json({ error: "Failed to get playback state" });
+    }
+  });
+
+  app.put("/api/spotify/player/pause", async (req, res) => {
+    try {
+      await pausePlayback();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error pausing playback:", error);
+      res.status(500).json({ error: "Failed to pause playback" });
+    }
+  });
+
+  app.put("/api/spotify/player/play", async (req, res) => {
+    try {
+      await resumePlayback();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resuming playback:", error);
+      res.status(500).json({ error: "Failed to resume playback" });
+    }
+  });
+
+  app.put("/api/spotify/player/seek", async (req, res) => {
+    try {
+      const { positionMs } = req.body;
+      if (typeof positionMs !== "number" || positionMs < 0) {
+        return res.status(400).json({ error: "Valid positionMs is required" });
+      }
+      await seekPlayback(positionMs);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error seeking playback:", error);
+      res.status(500).json({ error: "Failed to seek playback" });
     }
   });
 

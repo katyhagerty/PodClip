@@ -37,5 +37,12 @@ export const insertBookmarkSchema = createInsertSchema(bookmarks).omit({
   createdAt: true,
 });
 
+export const patchBookmarkSchema = z.object({
+  transcript: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  durationMs: z.number().nullable().optional(),
+}).strict();
+
 export type InsertBookmark = z.infer<typeof insertBookmarkSchema>;
+export type PatchBookmark = z.infer<typeof patchBookmarkSchema>;
 export type Bookmark = typeof bookmarks.$inferSelect;

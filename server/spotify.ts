@@ -229,6 +229,105 @@ export async function getSavedShows(): Promise<SpotifyEpisode[]> {
   }
 }
 
+export interface PlaybackState {
+  isPlaying: boolean;
+  progressMs: number;
+  episode: {
+    id: string;
+    name: string;
+    showName: string;
+    showImageUrl: string | null;
+    durationMs: number;
+    audioUrl: string | null;
+  } | null;
+}
+
+export async function getCurrentPlayback(): Promise<PlaybackState | null> {
+  try {
+    const { accessToken } = await getAccessToken();
+    
+    const response = await fetch(
+      'https://api.spotify.com/v1/me/player/currently-playing?additional_types=episode',
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        }
+      }
+    );
+    
+    if (response.status === 204 || response.status === 202) {
+      return null;
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.item || data.currently_playing_type !== 'episode') {
+      return {
+        isPlaying: data.is_playing || false,
+        progressMs: data.progress_ms || 0,
+        episode: null,
+      };
+    }
+    
+    const episode = data.item;
+    return {
+      isPlaying: data.is_playing || false,
+      progressMs: data.progress_ms || 0,
+      episode: {
+        id: episode.id,
+        name: episode.name,
+        showName: episode.show?.name || 'Unknown Show',
+        showImageUrl: episode.images?.[0]?.url || episode.show?.images?.[0]?.url || null,
+        durationMs: episode.duration_ms,
+        audioUrl: episode.audio_preview_url || null,
+      },
+    };
+  } catch (error) {
+    console.error("Error getting current playback:", error);
+    throw error;
+  }
+}
+
+export async function pausePlayback(): Promise<void> {
+  const { accessToken } = await getAccessToken();
+  const response = await fetch('https://api.spotify.com/v1/me/player/pause', {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  if (!response.ok && response.status !== 403) {
+    throw new Error(`Spotify API error: ${response.status}`);
+  }
+}
+
+export async function resumePlayback(): Promise<void> {
+  const { accessToken } = await getAccessToken();
+  const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  if (!response.ok && response.status !== 403) {
+    throw new Error(`Spotify API error: ${response.status}`);
+  }
+}
+
+export async function seekPlayback(positionMs: number): Promise<void> {
+  const { accessToken } = await getAccessToken();
+  const response = await fetch(
+    `https://api.spotify.com/v1/me/player/seek?position_ms=${positionMs}`,
+    {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Spotify API error: ${response.status}`);
+  }
+}
+
 export async function getRecentlyPlayedEpisodes(): Promise<SpotifyEpisode[]> {
   try {
     const { accessToken } = await getAccessToken();
