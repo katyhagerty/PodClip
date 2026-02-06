@@ -18,11 +18,13 @@ import {
   Clock,
   Headphones,
   Radio,
-  AlertCircle,
   Loader2,
   Bookmark,
   Check,
   X,
+  Search,
+  Timer,
+  ExternalLink,
 } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import type { Bookmark as BookmarkType, InsertBookmark } from "@shared/schema";
@@ -52,6 +54,16 @@ interface CapturedClip {
   audioUrl: string | null;
 }
 
+interface ManualEpisode {
+  id: string;
+  name: string;
+  showName: string;
+  showImageUrl: string | null;
+  audioUrl: string | null;
+}
+
+type Mode = "loading" | "live" | "manual";
+
 export default function NowPlaying() {
   const { toast } = useToast();
   const [clipStartMs, setClipStartMs] = useState<number | null>(null);
@@ -62,33 +74,74 @@ export default function NowPlaying() {
   const lastProgressMs = useRef<number>(0);
   const isPlayingRef = useRef<boolean>(false);
 
-  const { data: playback, isLoading, isError, error } = useQuery<PlaybackState | null>({
+  const [manualEpisode, setManualEpisode] = useState<ManualEpisode | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [stopwatchRunning, setStopwatchRunning] = useState(false);
+  const [stopwatchMs, setStopwatchMs] = useState(0);
+  const stopwatchStartRef = useRef<number>(0);
+  const stopwatchOffsetRef = useRef<number>(0);
+
+  const [spotifyFailed, setSpotifyFailed] = useState(false);
+
+  const { data: playback, isLoading, isError } = useQuery<PlaybackState | null>({
     queryKey: ["/api/spotify/player"],
-    refetchInterval: 3000,
+    refetchInterval: spotifyFailed ? false : 3000,
+    retry: 0,
+    enabled: !spotifyFailed,
   });
+
+  useEffect(() => {
+    if (isError) {
+      setSpotifyFailed(true);
+    }
+  }, [isError]);
+
+  const mode: Mode = isLoading && !spotifyFailed
+    ? "loading"
+    : spotifyFailed || isError || !playback?.episode
+    ? "manual"
+    : "live";
 
   const { data: sessionBookmarks } = useQuery<BookmarkType[]>({
     queryKey: ["/api/bookmarks"],
   });
 
   useEffect(() => {
-    if (playback) {
+    if (playback && mode === "live") {
       lastFetchTime.current = Date.now();
       lastProgressMs.current = playback.progressMs;
       isPlayingRef.current = playback.isPlaying;
       setLocalProgressMs(playback.progressMs);
     }
-  }, [playback]);
+  }, [playback, mode]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (isPlayingRef.current) {
+      if (mode === "live" && isPlayingRef.current) {
         const elapsed = Date.now() - lastFetchTime.current;
         setLocalProgressMs(lastProgressMs.current + elapsed);
       }
     }, 200);
     return () => clearInterval(interval);
-  }, []);
+  }, [mode]);
+
+  useEffect(() => {
+    let animFrame: number;
+    const tick = () => {
+      if (stopwatchRunning) {
+        setStopwatchMs(stopwatchOffsetRef.current + (Date.now() - stopwatchStartRef.current));
+        animFrame = requestAnimationFrame(tick);
+      }
+    };
+    if (stopwatchRunning) {
+      animFrame = requestAnimationFrame(tick);
+    }
+    return () => {
+      if (animFrame) cancelAnimationFrame(animFrame);
+    };
+  }, [stopwatchRunning]);
 
   const pauseMutation = useMutation({
     mutationFn: () => apiRequest("PUT", "/api/spotify/player/pause"),
@@ -154,7 +207,7 @@ export default function NowPlaying() {
     }
   };
 
-  const handleStartClip = useCallback(() => {
+  const handleStartClipLive = useCallback(() => {
     if (playback?.episode) {
       setClipStartMs(localProgressMs);
       toast({
@@ -164,11 +217,11 @@ export default function NowPlaying() {
     }
   }, [playback, localProgressMs, toast]);
 
-  const handleEndClip = useCallback(() => {
+  const handleEndClipLive = useCallback(() => {
     if (playback?.episode && clipStartMs !== null) {
       const endMs = localProgressMs;
       const durationMs = endMs - clipStartMs;
-      
+
       if (durationMs < 1000) {
         toast({
           title: "Clip too short",
@@ -190,6 +243,43 @@ export default function NowPlaying() {
       setClipStartMs(null);
     }
   }, [playback, clipStartMs, localProgressMs, toast]);
+
+  const handleStartClipManual = useCallback(() => {
+    if (manualEpisode) {
+      setClipStartMs(stopwatchMs);
+      toast({
+        title: "Clip started",
+        description: `Marking start at ${formatTime(stopwatchMs)}`,
+      });
+    }
+  }, [manualEpisode, stopwatchMs, toast]);
+
+  const handleEndClipManual = useCallback(() => {
+    if (manualEpisode && clipStartMs !== null) {
+      const endMs = stopwatchMs;
+      const durationMs = endMs - clipStartMs;
+
+      if (durationMs < 1000) {
+        toast({
+          title: "Clip too short",
+          description: "The clip must be at least 1 second long.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setCapturedClip({
+        startMs: clipStartMs,
+        endMs,
+        episodeId: manualEpisode.id,
+        episodeName: manualEpisode.name,
+        showName: manualEpisode.showName,
+        showImageUrl: manualEpisode.showImageUrl,
+        audioUrl: manualEpisode.audioUrl,
+      });
+      setClipStartMs(null);
+    }
+  }, [manualEpisode, clipStartMs, stopwatchMs, toast]);
 
   const handleSaveClip = () => {
     if (!capturedClip) return;
@@ -222,12 +312,64 @@ export default function NowPlaying() {
     seekMutation.mutate(localProgressMs + 30000);
   };
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      if (!res.ok) throw new Error("Search failed");
+      const data = await res.json();
+      setSearchResults(data);
+    } catch {
+      toast({ title: "Search failed", description: "Could not search episodes.", variant: "destructive" });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSelectEpisode = (ep: any) => {
+    setManualEpisode({
+      id: ep.id,
+      name: ep.name,
+      showName: ep.showName,
+      showImageUrl: ep.showImageUrl,
+      audioUrl: ep.audioUrl || null,
+    });
+    setSearchResults(null);
+    setSearchQuery("");
+    setStopwatchMs(0);
+    setStopwatchRunning(false);
+    stopwatchOffsetRef.current = 0;
+    setClipStartMs(null);
+    setCapturedClip(null);
+    setClipNote("");
+  };
+
+  const handleToggleStopwatch = () => {
+    if (stopwatchRunning) {
+      stopwatchOffsetRef.current = stopwatchMs;
+      setStopwatchRunning(false);
+    } else {
+      stopwatchStartRef.current = Date.now();
+      setStopwatchRunning(true);
+    }
+  };
+
+  const handleResetStopwatch = () => {
+    setStopwatchRunning(false);
+    setStopwatchMs(0);
+    stopwatchOffsetRef.current = 0;
+    stopwatchStartRef.current = 0;
+    setClipStartMs(null);
+  };
+
   const isRecording = clipStartMs !== null;
   const episode = playback?.episode;
   const progressPercent = episode ? (localProgressMs / episode.durationMs) * 100 : 0;
 
+  const currentEpisodeId = mode === "live" ? episode?.id : manualEpisode?.id;
   const recentSessionClips = sessionBookmarks
-    ?.filter((b) => episode && b.episodeId === episode.id)
+    ?.filter((b) => currentEpisodeId && b.episodeId === currentEpisodeId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
 
@@ -246,15 +388,19 @@ export default function NowPlaying() {
 
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="gap-1.5 text-xs">
-              <Radio className="w-3 h-3 text-primary" />
-              Now Playing
+              {mode === "live" ? (
+                <Radio className="w-3 h-3 text-primary" />
+              ) : (
+                <Timer className="w-3 h-3 text-primary" />
+              )}
+              {mode === "live" ? "Now Playing" : "Manual Mode"}
             </Badge>
           </div>
 
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 text-muted-foreground text-xs">
               <SiSpotify className="w-3 h-3 text-[#1DB954]" />
-              <span className="hidden sm:inline">Connected</span>
+              <span className="hidden sm:inline">{mode === "live" ? "Live" : "Manual"}</span>
             </div>
             <ThemeToggle />
           </div>
@@ -262,49 +408,14 @@ export default function NowPlaying() {
       </header>
 
       <div className="flex-1 container max-w-2xl mx-auto px-4 py-6 flex flex-col gap-6">
-        {isLoading ? (
+        {mode === "loading" ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
               <p className="text-muted-foreground">Connecting to Spotify...</p>
             </div>
           </div>
-        ) : isError ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-sm">
-              <AlertCircle className="w-12 h-12 text-destructive/60 mx-auto mb-4" />
-              <h3 className="font-semibold text-foreground mb-2">Spotify Connection Issue</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {(error as Error)?.message?.includes("403")
-                  ? "The Spotify app is in development mode. Playback features require an approved Spotify app."
-                  : "Could not connect to Spotify. Make sure Spotify is open and playing on one of your devices."}
-              </p>
-              <Link href="/">
-                <Button variant="outline" data-testid="button-back-home">
-                  Back to Clips
-                </Button>
-              </Link>
-            </div>
-          </div>
-        ) : !episode ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-sm">
-              <Radio className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-              <h3 className="font-semibold text-foreground mb-2">Nothing Playing</h3>
-              <p className="text-sm text-muted-foreground mb-1">
-                Open Spotify and start playing a podcast episode.
-              </p>
-              <p className="text-xs text-muted-foreground/70 mb-6">
-                Make sure you're playing a podcast, not music.
-              </p>
-              <Link href="/">
-                <Button variant="outline" data-testid="button-back-home-empty">
-                  Back to Clips
-                </Button>
-              </Link>
-            </div>
-          </div>
-        ) : (
+        ) : mode === "live" && episode ? (
           <>
             <div className="flex flex-col items-center gap-4" data-testid="now-playing-info">
               {episode.showImageUrl ? (
@@ -395,59 +506,14 @@ export default function NowPlaying() {
             </div>
 
             {capturedClip ? (
-              <Card data-testid="captured-clip-form">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-semibold text-sm text-foreground">Save Clip</h3>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(capturedClip.startMs)}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">to</span>
-                      <Badge variant="secondary" className="gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(capturedClip.endMs)}
-                      </Badge>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="text-xs text-muted-foreground">
-                    Duration: {formatTime(capturedClip.endMs - capturedClip.startMs)}
-                  </Badge>
-                  <Textarea
-                    placeholder="Add a note about this moment..."
-                    value={clipNote}
-                    onChange={(e) => setClipNote(e.target.value)}
-                    className="resize-none"
-                    rows={2}
-                    data-testid="input-clip-note"
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCancelClip}
-                      data-testid="button-cancel-clip"
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Discard
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleSaveClip}
-                      disabled={createMutation.isPending}
-                      data-testid="button-save-clip"
-                    >
-                      {createMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      ) : (
-                        <Check className="w-4 h-4 mr-1" />
-                      )}
-                      {createMutation.isPending ? "Saving..." : "Save Clip"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <ClipSaveForm
+                capturedClip={capturedClip}
+                clipNote={clipNote}
+                setClipNote={setClipNote}
+                onSave={handleSaveClip}
+                onCancel={handleCancelClip}
+                isPending={createMutation.isPending}
+              />
             ) : (
               <div className="flex justify-center">
                 {isRecording ? (
@@ -462,7 +528,7 @@ export default function NowPlaying() {
                     <Button
                       size="lg"
                       variant="destructive"
-                      onClick={handleEndClip}
+                      onClick={handleEndClipLive}
                       className="gap-2 px-8"
                       data-testid="button-end-clip"
                     >
@@ -473,7 +539,7 @@ export default function NowPlaying() {
                 ) : (
                   <Button
                     size="lg"
-                    onClick={handleStartClip}
+                    onClick={handleStartClipLive}
                     className="gap-2 px-8"
                     data-testid="button-start-clip"
                   >
@@ -483,57 +549,355 @@ export default function NowPlaying() {
                 )}
               </div>
             )}
+          </>
+        ) : (
+          <>
+            {!manualEpisode ? (
+              <div className="flex flex-col items-center gap-6 pt-4">
+                <div className="text-center max-w-sm">
+                  <Timer className="w-12 h-12 text-primary/60 mx-auto mb-4" />
+                  <h3 className="font-semibold text-foreground mb-2" data-testid="text-manual-mode-title">Clip Capture</h3>
+                  <p className="text-sm text-muted-foreground mb-1">
+                    Search for the episode you're listening to, then use the timer to mark clip boundaries while you play it in Spotify.
+                  </p>
+                  <p className="text-xs text-muted-foreground/70 mb-6">
+                    Start the timer when you press play in Spotify, then mark clips as you listen.
+                  </p>
+                </div>
 
-            {recentSessionClips && recentSessionClips.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Bookmark className="w-4 h-4" />
-                  Clips from this episode
-                </h3>
-                <div className="space-y-2">
-                  {recentSessionClips.map((clip) => (
-                    <Card key={clip.id} className="hover-elevate overflow-visible" data-testid={`session-clip-${clip.id}`}>
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Badge variant="secondary" className="gap-1 flex-shrink-0">
-                              <Clock className="w-3 h-3" />
-                              {formatTime(clip.timestampMs)}
-                            </Badge>
-                            {clip.durationMs && (
-                              <Badge variant="outline" className="text-muted-foreground flex-shrink-0">
-                                {formatTime(clip.durationMs)}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {clip.transcript ? (
-                              <Badge variant="secondary" className="text-xs gap-1">
-                                <Check className="w-3 h-3" />
-                                Transcript
-                              </Badge>
+                <div className="w-full max-w-md space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Search for a podcast episode..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                      data-testid="input-manual-episode-search"
+                    />
+                    <Button
+                      onClick={handleSearch}
+                      disabled={isSearching || !searchQuery.trim()}
+                      data-testid="button-manual-search"
+                    >
+                      {isSearching ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {searchResults && searchResults.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No episodes found. Try a different search.
+                    </p>
+                  )}
+
+                  {searchResults && searchResults.length > 0 && (
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {searchResults.map((ep: any) => (
+                        <Card
+                          key={ep.id}
+                          className="hover-elevate cursor-pointer overflow-visible"
+                          onClick={() => handleSelectEpisode(ep)}
+                          data-testid={`manual-episode-result-${ep.id}`}
+                        >
+                          <CardContent className="p-3 flex items-center gap-3">
+                            {ep.showImageUrl ? (
+                              <img
+                                src={ep.showImageUrl}
+                                alt={ep.showName}
+                                className="w-10 h-10 rounded-md object-cover flex-shrink-0"
+                              />
                             ) : (
-                              <Badge variant="outline" className="text-xs text-muted-foreground gap-1">
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                Generating
-                              </Badge>
+                              <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+                                <Headphones className="w-5 h-5 text-muted-foreground" />
+                              </div>
                             )}
-                          </div>
-                        </div>
-                        {clip.note && (
-                          <p className="text-xs text-muted-foreground mt-2 line-clamp-1">
-                            {clip.note}
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-foreground line-clamp-1">
+                                {ep.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground line-clamp-1">
+                                {ep.showName}
+                              </p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
+            ) : (
+              <>
+                <div className="flex flex-col items-center gap-4" data-testid="manual-episode-info">
+                  {manualEpisode.showImageUrl ? (
+                    <img
+                      src={manualEpisode.showImageUrl}
+                      alt={manualEpisode.showName}
+                      className="w-48 h-48 sm:w-56 sm:h-56 rounded-lg object-cover shadow-lg"
+                      data-testid="img-manual-cover"
+                    />
+                  ) : (
+                    <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
+                      <Headphones className="w-16 h-16 text-primary" />
+                    </div>
+                  )}
+                  <div className="text-center max-w-full">
+                    <h2 className="font-bold text-lg text-foreground line-clamp-2" data-testid="text-manual-episode-name">
+                      {manualEpisode.name}
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-1" data-testid="text-manual-show-name">
+                      {manualEpisode.showName}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-muted-foreground"
+                    onClick={() => {
+                      setManualEpisode(null);
+                      setStopwatchRunning(false);
+                      setStopwatchMs(0);
+                      stopwatchOffsetRef.current = 0;
+                      setClipStartMs(null);
+                      setCapturedClip(null);
+                    }}
+                    data-testid="button-change-episode"
+                  >
+                    <Search className="w-3 h-3" />
+                    Change Episode
+                  </Button>
+                </div>
+
+                <Card data-testid="stopwatch-card">
+                  <CardContent className="p-4 flex flex-col items-center gap-4">
+                    <p className="text-xs text-muted-foreground">
+                      Sync this timer with your Spotify playback
+                    </p>
+                    <div className="text-4xl font-mono font-bold text-foreground tabular-nums" data-testid="text-stopwatch-time">
+                      {formatTime(stopwatchMs)}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        size="icon"
+                        className="w-14 h-14 rounded-full"
+                        onClick={handleToggleStopwatch}
+                        data-testid="button-stopwatch-toggle"
+                      >
+                        {stopwatchRunning ? (
+                          <Pause className="w-6 h-6" />
+                        ) : (
+                          <Play className="w-6 h-6 ml-0.5" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResetStopwatch}
+                        disabled={stopwatchMs === 0}
+                        data-testid="button-stopwatch-reset"
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-center max-w-xs">
+                      Press play here when you press play in Spotify. The timer tracks your listening position so you can mark clips.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {capturedClip ? (
+                  <ClipSaveForm
+                    capturedClip={capturedClip}
+                    clipNote={clipNote}
+                    setClipNote={setClipNote}
+                    onSave={handleSaveClip}
+                    onCancel={handleCancelClip}
+                    isPending={createMutation.isPending}
+                  />
+                ) : (
+                  <div className="flex justify-center">
+                    {isRecording ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
+                          </span>
+                          Recording from {formatTime(clipStartMs!)}
+                          <Badge variant="secondary" className="gap-1 ml-2">
+                            <Clock className="w-3 h-3" />
+                            {formatTime(stopwatchMs - clipStartMs!)}
+                          </Badge>
+                        </div>
+                        <Button
+                          size="lg"
+                          variant="destructive"
+                          onClick={handleEndClipManual}
+                          className="gap-2 px-8"
+                          data-testid="button-end-clip"
+                        >
+                          <Square className="w-5 h-5" />
+                          End Clip
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="lg"
+                        onClick={handleStartClipManual}
+                        className="gap-2 px-8"
+                        disabled={!stopwatchRunning && stopwatchMs === 0}
+                        data-testid="button-start-clip"
+                      >
+                        <Circle className="w-5 h-5" />
+                        Start Clip
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {!manualEpisode.id.startsWith("itunes-") && (
+                  <div className="flex justify-center">
+                    <a
+                      href={`https://open.spotify.com/episode/${manualEpisode.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-open-in-spotify">
+                        <SiSpotify className="w-3.5 h-3.5 text-[#1DB954]" />
+                        Open in Spotify
+                        <ExternalLink className="w-3 h-3" />
+                      </Button>
+                    </a>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
+
+        {recentSessionClips && recentSessionClips.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Bookmark className="w-4 h-4" />
+              Clips from this episode
+            </h3>
+            <div className="space-y-2">
+              {recentSessionClips.map((clip) => (
+                <Card key={clip.id} className="hover-elevate overflow-visible" data-testid={`session-clip-${clip.id}`}>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="secondary" className="gap-1 flex-shrink-0">
+                          <Clock className="w-3 h-3" />
+                          {formatTime(clip.timestampMs)}
+                        </Badge>
+                        {clip.durationMs && (
+                          <Badge variant="outline" className="text-muted-foreground flex-shrink-0">
+                            {formatTime(clip.durationMs)}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {clip.transcript ? (
+                          <Badge variant="secondary" className="text-xs gap-1">
+                            <Check className="w-3 h-3" />
+                            Transcript
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Generating
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    {clip.note && (
+                      <p className="text-xs text-muted-foreground mt-2 line-clamp-1">
+                        {clip.note}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function ClipSaveForm({
+  capturedClip,
+  clipNote,
+  setClipNote,
+  onSave,
+  onCancel,
+  isPending,
+}: {
+  capturedClip: CapturedClip;
+  clipNote: string;
+  setClipNote: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <Card data-testid="captured-clip-form">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h3 className="font-semibold text-sm text-foreground">Save Clip</h3>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="gap-1">
+              <Clock className="w-3 h-3" />
+              {formatTime(capturedClip.startMs)}
+            </Badge>
+            <span className="text-xs text-muted-foreground">to</span>
+            <Badge variant="secondary" className="gap-1">
+              <Clock className="w-3 h-3" />
+              {formatTime(capturedClip.endMs)}
+            </Badge>
+          </div>
+        </div>
+        <Badge variant="outline" className="text-xs text-muted-foreground">
+          Duration: {formatTime(capturedClip.endMs - capturedClip.startMs)}
+        </Badge>
+        <Textarea
+          placeholder="Add a note about this moment..."
+          value={clipNote}
+          onChange={(e) => setClipNote(e.target.value)}
+          className="resize-none"
+          rows={2}
+          data-testid="input-clip-note"
+        />
+        <div className="flex gap-2 justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            data-testid="button-cancel-clip"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Discard
+          </Button>
+          <Button
+            size="sm"
+            onClick={onSave}
+            disabled={isPending}
+            data-testid="button-save-clip"
+          >
+            {isPending ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4 mr-1" />
+            )}
+            {isPending ? "Saving..." : "Save Clip"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
