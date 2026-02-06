@@ -28,6 +28,7 @@ export const bookmarks = pgTable("bookmarks", {
   durationMs: integer("duration_ms"),
   note: text("note"),
   transcript: text("transcript"),
+  audioUrl: text("audio_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

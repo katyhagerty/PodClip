@@ -117,7 +117,7 @@ export function BookmarkDialog({
     }
   }, [bookmark, prefilledEpisode, form]);
 
-  const audioUrl = prefilledEpisode?.audioUrl;
+  const audioUrl = prefilledEpisode?.audioUrl || bookmark?.audioUrl;
 
   const handleGenerateTranscript = async () => {
     const timestamp = form.getValues("timestamp");
@@ -171,6 +171,7 @@ export function BookmarkDialog({
       durationMs: values.duration ? parseTimeToMs(values.duration) : null,
       note: values.note || null,
       transcript: values.transcript || null,
+      audioUrl: audioUrl || null,
     };
     onSubmit(data);
   };
@@ -292,7 +293,7 @@ export function BookmarkDialog({
                 <FormItem>
                   <div className="flex items-center justify-between">
                     <FormLabel>Clip Transcript (optional)</FormLabel>
-                    {audioUrl && !isEditing && (
+                    {audioUrl && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -313,7 +314,7 @@ export function BookmarkDialog({
                   </div>
                   <FormControl>
                     <Textarea
-                      placeholder={audioUrl && !isEditing
+                      placeholder={audioUrl
                         ? "Click Generate to auto-transcribe, or paste your own..."
                         : "Paste just the transcript for this clipped moment..."}
                       className="resize-vertical font-mono text-xs"
