@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertBookmarkSchema, patchBookmarkSchema } from "@shared/schema";
 import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId, getCurrentPlayback, pausePlayback, resumePlayback, seekPlayback } from "./spotify";
 import { transcribeClip } from "./transcribe";
+import { transcribeFullEpisode } from "./transcribe-episode";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -195,6 +196,81 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error seeking playback:", error);
       res.status(500).json({ error: "Failed to seek playback" });
+    }
+  });
+
+  app.post("/api/episode-transcripts", async (req, res) => {
+    try {
+      const { episodeId, episodeName, showName, showImageUrl, audioUrl } = req.body;
+      if (!episodeId || typeof episodeId !== "string" ||
+          !episodeName || typeof episodeName !== "string" ||
+          !showName || typeof showName !== "string" ||
+          !audioUrl || typeof audioUrl !== "string") {
+        return res.status(400).json({ error: "episodeId, episodeName, showName, and audioUrl are required and must be strings" });
+      }
+
+      let parsed: URL;
+      try {
+        parsed = new URL(audioUrl);
+      } catch {
+        return res.status(400).json({ error: "Invalid audio URL" });
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return res.status(400).json({ error: "Only HTTP/HTTPS URLs are allowed" });
+      }
+
+      const existing = await storage.getEpisodeTranscriptByEpisodeId(episodeId);
+      if (existing && (existing.status === "processing" || existing.status === "completed")) {
+        return res.json(existing);
+      }
+
+      const transcript = await storage.createEpisodeTranscript({
+        episodeId,
+        episodeName,
+        showName,
+        showImageUrl: showImageUrl || null,
+        audioUrl,
+        status: "pending",
+        progress: 0,
+        totalChunks: 0,
+        segments: null,
+        errorMessage: null,
+      });
+
+      transcribeFullEpisode(transcript.id, audioUrl).catch((err) => {
+        console.error("Background transcription error:", err);
+      });
+
+      res.status(201).json(transcript);
+    } catch (error) {
+      console.error("Error creating episode transcript:", error);
+      res.status(500).json({ error: "Failed to start transcription" });
+    }
+  });
+
+  app.get("/api/episode-transcripts/by-episode/:episodeId", async (req, res) => {
+    try {
+      const transcript = await storage.getEpisodeTranscriptByEpisodeId(req.params.episodeId);
+      if (!transcript) {
+        return res.status(404).json({ error: "No transcript found for this episode" });
+      }
+      res.json(transcript);
+    } catch (error) {
+      console.error("Error fetching transcript by episode:", error);
+      res.status(500).json({ error: "Failed to fetch transcript" });
+    }
+  });
+
+  app.get("/api/episode-transcripts/:id", async (req, res) => {
+    try {
+      const transcript = await storage.getEpisodeTranscript(req.params.id);
+      if (!transcript) {
+        return res.status(404).json({ error: "Transcript not found" });
+      }
+      res.json(transcript);
+    } catch (error) {
+      console.error("Error fetching transcript:", error);
+      res.status(500).json({ error: "Failed to fetch transcript" });
     }
   });
 

@@ -10,7 +10,7 @@ import { EpisodeSearchDialog } from "@/components/episode-search-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Headphones, Bookmark, Radio } from "lucide-react";
+import { Plus, Search, Headphones, Bookmark, Radio, FileText } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import { Link } from "wouter";
 import type { Bookmark as BookmarkType, InsertBookmark } from "@shared/schema";
@@ -173,6 +173,12 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/transcript">
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-transcript">
+                <FileText className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Transcript</span>
+              </Button>
+            </Link>
             <Link href="/now-playing">
               <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-now-playing">
                 <Radio className="w-3.5 h-3.5" />

@@ -46,6 +46,7 @@ Key server modules:
 - **Tables**:
   - `users` - User accounts with username/password
   - `bookmarks` - Podcast clip bookmarks with episode metadata, timestamps, notes, transcripts, and audio URLs
+  - `episode_transcripts` - Full episode transcripts with segments (text + timestamps), status tracking, and progress
 - **Validation**: Zod schemas generated from Drizzle schemas via drizzle-zod
   - `insertBookmarkSchema` - Full bookmark creation/update validation
   - `patchBookmarkSchema` - Partial update validation (transcript, note, durationMs only)
@@ -66,10 +67,14 @@ All API routes are prefixed with `/api/`:
 - `PUT /api/spotify/player/pause` - Pause Spotify playback
 - `PUT /api/spotify/player/seek` - Seek to position in current track
 - `POST /api/transcribe` - Transcribe a podcast clip (takes audioUrl, timestampMs, durationMs; returns transcript text)
+- `POST /api/episode-transcripts` - Start full episode transcription (takes episodeId, episodeName, showName, showImageUrl, audioUrl)
+- `GET /api/episode-transcripts/by-episode/:episodeId` - Get transcript by episode ID
+- `GET /api/episode-transcripts/:id` - Get transcript by transcript ID (includes progress/status)
 
 ### Pages
 - `/` - Home page with bookmark list, search, and add clip flow
 - `/now-playing` - Now Playing companion widget for real-time clip capture from Spotify
+- `/transcript` - Full episode transcript viewer with search and highlight-to-clip functionality
 
 ### Build System
 - Development: Vite dev server with Express API middleware
@@ -97,6 +102,17 @@ The application uses Replit AI Integrations (OpenAI-compatible) for speech-to-te
 - Transcripts are auto-generated after saving a new clip (no manual Generate step needed in create mode)
 - In edit mode, a "Regenerate" button allows re-generating transcripts with updated timestamps
 - Audio URLs come from iTunes (`episodeUrl` field) or Spotify (`audio_preview_url` field)
+
+### Full Episode Transcription
+The `/transcript` page allows users to generate full episode transcripts:
+1. User searches for and selects an episode
+2. Clicks "Generate Full Transcript" to start background transcription
+3. `server/transcribe-episode.ts` downloads audio, splits into 2-minute chunks via ffmpeg, transcribes each chunk
+4. Progress is stored in the `episode_transcripts` table (status, progress, totalChunks)
+5. Frontend polls for updates every 3 seconds during processing
+6. Once complete, the full transcript displays with timestamps per segment
+7. Users can search within the transcript and highlight text to save as clips
+8. Highlighted text maps to segment timestamps for accurate clip boundaries
 
 ### Transcript Auto-Generation Flow
 1. User saves a new clip (via Add Clip dialog or Now Playing widget)

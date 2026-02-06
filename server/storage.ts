@@ -4,8 +4,11 @@ import {
   type Bookmark, 
   type InsertBookmark, 
   type PatchBookmark,
+  type EpisodeTranscript,
+  type InsertEpisodeTranscript,
   users, 
-  bookmarks 
+  bookmarks,
+  episodeTranscripts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
@@ -21,6 +24,11 @@ export interface IStorage {
   updateBookmark(id: string, bookmark: InsertBookmark): Promise<Bookmark | undefined>;
   patchBookmark(id: string, fields: PatchBookmark): Promise<Bookmark | undefined>;
   deleteBookmark(id: string): Promise<boolean>;
+  
+  getEpisodeTranscript(id: string): Promise<EpisodeTranscript | undefined>;
+  getEpisodeTranscriptByEpisodeId(episodeId: string): Promise<EpisodeTranscript | undefined>;
+  createEpisodeTranscript(transcript: InsertEpisodeTranscript): Promise<EpisodeTranscript>;
+  updateEpisodeTranscript(id: string, fields: Partial<InsertEpisodeTranscript>): Promise<EpisodeTranscript | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -74,6 +82,35 @@ export class DatabaseStorage implements IStorage {
   async deleteBookmark(id: string): Promise<boolean> {
     const result = await db.delete(bookmarks).where(eq(bookmarks.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getEpisodeTranscript(id: string): Promise<EpisodeTranscript | undefined> {
+    const [transcript] = await db.select().from(episodeTranscripts).where(eq(episodeTranscripts.id, id));
+    return transcript;
+  }
+
+  async getEpisodeTranscriptByEpisodeId(episodeId: string): Promise<EpisodeTranscript | undefined> {
+    const [transcript] = await db
+      .select()
+      .from(episodeTranscripts)
+      .where(eq(episodeTranscripts.episodeId, episodeId))
+      .orderBy(desc(episodeTranscripts.createdAt))
+      .limit(1);
+    return transcript;
+  }
+
+  async createEpisodeTranscript(transcript: InsertEpisodeTranscript): Promise<EpisodeTranscript> {
+    const [created] = await db.insert(episodeTranscripts).values(transcript).returning();
+    return created;
+  }
+
+  async updateEpisodeTranscript(id: string, fields: Partial<InsertEpisodeTranscript>): Promise<EpisodeTranscript | undefined> {
+    const [updated] = await db
+      .update(episodeTranscripts)
+      .set(fields)
+      .where(eq(episodeTranscripts.id, id))
+      .returning();
+    return updated;
   }
 }
 
