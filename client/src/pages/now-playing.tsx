@@ -371,6 +371,27 @@ export default function NowPlaying() {
     seekMutation.mutate(localProgressMs + 30000);
   };
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (capturedClip) return;
+
+      if (e.code === "KeyS" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (mode === "live") {
+          if (clipStartMs === null) handleStartClipLive();
+          else handleEndClipLive();
+        } else if (mode === "manual") {
+          if (clipStartMs === null) handleStartClipManual();
+          else handleEndClipManual();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [mode, clipStartMs, capturedClip, handleStartClipLive, handleEndClipLive, handleStartClipManual, handleEndClipManual]);
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
@@ -594,17 +615,21 @@ export default function NowPlaying() {
                       <Square className="w-5 h-5" />
                       End Clip
                     </Button>
+                    <kbd className="mt-1 text-[10px] text-muted-foreground/60">press S</kbd>
                   </div>
                 ) : (
-                  <Button
-                    size="lg"
-                    onClick={handleStartClipLive}
-                    className="gap-2 px-8"
-                    data-testid="button-start-clip"
-                  >
-                    <Circle className="w-5 h-5" />
-                    Start Clip
-                  </Button>
+                  <div className="flex flex-col items-center gap-1">
+                    <Button
+                      size="lg"
+                      onClick={handleStartClipLive}
+                      className="gap-2 px-8"
+                      data-testid="button-start-clip"
+                    >
+                      <Circle className="w-5 h-5" />
+                      Start Clip
+                    </Button>
+                    <kbd className="text-[10px] text-muted-foreground/60">press S</kbd>
+                  </div>
                 )}
               </div>
             )}
@@ -817,18 +842,22 @@ export default function NowPlaying() {
                           <Square className="w-5 h-5" />
                           End Clip
                         </Button>
+                        <kbd className="mt-1 text-[10px] text-muted-foreground/60">press S</kbd>
                       </div>
                     ) : (
-                      <Button
-                        size="lg"
-                        onClick={handleStartClipManual}
-                        className="gap-2 px-8"
-                        disabled={!stopwatchRunning && stopwatchMs === 0}
-                        data-testid="button-start-clip"
-                      >
-                        <Circle className="w-5 h-5" />
-                        Start Clip
-                      </Button>
+                      <div className="flex flex-col items-center gap-1">
+                        <Button
+                          size="lg"
+                          onClick={handleStartClipManual}
+                          className="gap-2 px-8"
+                          disabled={!stopwatchRunning && stopwatchMs === 0}
+                          data-testid="button-start-clip"
+                        >
+                          <Circle className="w-5 h-5" />
+                          Start Clip
+                        </Button>
+                        <kbd className="text-[10px] text-muted-foreground/60">press S</kbd>
+                      </div>
                     )}
                   </div>
                 )}
