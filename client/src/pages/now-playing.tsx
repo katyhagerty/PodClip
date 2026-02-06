@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { formatTime } from "@/lib/utils";
 import {
@@ -21,7 +20,6 @@ import {
   Loader2,
   Bookmark,
   Check,
-  X,
   Search,
   Timer,
   ExternalLink,
@@ -42,16 +40,6 @@ interface PlaybackState {
     durationMs: number;
     audioUrl: string | null;
   } | null;
-}
-
-interface CapturedClip {
-  startMs: number;
-  endMs: number;
-  episodeId: string;
-  episodeName: string;
-  showName: string;
-  showImageUrl: string | null;
-  audioUrl: string | null;
 }
 
 interface ManualEpisode {
@@ -126,8 +114,6 @@ function TimeInput({ valueMs, onChange }: { valueMs: number; onChange: (ms: numb
 export default function NowPlaying() {
   const { toast } = useToast();
   const [clipStartMs, setClipStartMs] = useState<number | null>(null);
-  const [capturedClip, setCapturedClip] = useState<CapturedClip | null>(null);
-  const [clipNote, setClipNote] = useState("");
   const [localProgressMs, setLocalProgressMs] = useState(0);
   const lastFetchTime = useRef<number>(Date.now());
   const lastProgressMs = useRef<number>(0);
@@ -229,8 +215,6 @@ export default function NowPlaying() {
     onSuccess: async (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookmarks"] });
       const bookmark = await response.json();
-      setCapturedClip(null);
-      setClipNote("");
       toast({
         title: "Clip saved!",
         description: "Your podcast moment has been bookmarked. Transcript is generating...",
@@ -290,18 +274,21 @@ export default function NowPlaying() {
         return;
       }
 
-      setCapturedClip({
-        startMs: clipStartMs,
-        endMs,
+      const data: InsertBookmark = {
         episodeId: playback.episode.id,
         episodeName: playback.episode.name,
         showName: playback.episode.showName,
-        showImageUrl: playback.episode.showImageUrl,
-        audioUrl: playback.episode.audioUrl,
-      });
+        showImageUrl: playback.episode.showImageUrl || null,
+        timestampMs: clipStartMs,
+        durationMs,
+        note: null,
+        transcript: null,
+        audioUrl: playback.episode.audioUrl || null,
+      };
+      createMutation.mutate(data);
       setClipStartMs(null);
     }
-  }, [playback, clipStartMs, localProgressMs, toast]);
+  }, [playback, clipStartMs, localProgressMs, toast, createMutation]);
 
   const handleStartClipManual = useCallback(() => {
     if (manualEpisode) {
@@ -327,40 +314,22 @@ export default function NowPlaying() {
         return;
       }
 
-      setCapturedClip({
-        startMs: clipStartMs,
-        endMs,
+      const data: InsertBookmark = {
         episodeId: manualEpisode.id,
         episodeName: manualEpisode.name,
         showName: manualEpisode.showName,
-        showImageUrl: manualEpisode.showImageUrl,
-        audioUrl: manualEpisode.audioUrl,
-      });
+        showImageUrl: manualEpisode.showImageUrl || null,
+        timestampMs: clipStartMs,
+        durationMs,
+        note: null,
+        transcript: null,
+        audioUrl: manualEpisode.audioUrl || null,
+      };
+      createMutation.mutate(data);
       setClipStartMs(null);
     }
-  }, [manualEpisode, clipStartMs, stopwatchMs, toast]);
+  }, [manualEpisode, clipStartMs, stopwatchMs, toast, createMutation]);
 
-  const handleSaveClip = () => {
-    if (!capturedClip) return;
-    const data: InsertBookmark = {
-      episodeId: capturedClip.episodeId,
-      episodeName: capturedClip.episodeName,
-      showName: capturedClip.showName,
-      showImageUrl: capturedClip.showImageUrl || null,
-      timestampMs: capturedClip.startMs,
-      durationMs: capturedClip.endMs - capturedClip.startMs,
-      note: clipNote || null,
-      transcript: null,
-      audioUrl: capturedClip.audioUrl || null,
-    };
-    createMutation.mutate(data);
-  };
-
-  const handleCancelClip = () => {
-    setCapturedClip(null);
-    setClipNote("");
-    setClipStartMs(null);
-  };
 
   const handleSkipBack = () => {
     const newPosition = Math.max(0, localProgressMs - 15000);
@@ -375,7 +344,6 @@ export default function NowPlaying() {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (capturedClip) return;
 
       if (e.code === "KeyS" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
@@ -390,7 +358,7 @@ export default function NowPlaying() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [mode, clipStartMs, capturedClip, handleStartClipLive, handleEndClipLive, handleStartClipManual, handleEndClipManual]);
+  }, [mode, clipStartMs, handleStartClipLive, handleEndClipLive, handleStartClipManual, handleEndClipManual]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -421,8 +389,6 @@ export default function NowPlaying() {
     setStopwatchRunning(false);
     stopwatchOffsetRef.current = 0;
     setClipStartMs(null);
-    setCapturedClip(null);
-    setClipNote("");
   };
 
   const handleToggleStopwatch = () => {
@@ -585,54 +551,43 @@ export default function NowPlaying() {
               </Button>
             </div>
 
-            {capturedClip ? (
-              <ClipSaveForm
-                capturedClip={capturedClip}
-                clipNote={clipNote}
-                setClipNote={setClipNote}
-                onSave={handleSaveClip}
-                onCancel={handleCancelClip}
-                isPending={createMutation.isPending}
-              />
-            ) : (
-              <div className="flex justify-center">
-                {isRecording ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
-                      </span>
-                      Recording from {formatTime(clipStartMs!)}
-                    </div>
-                    <Button
-                      size="lg"
-                      variant="destructive"
-                      onClick={handleEndClipLive}
-                      className="gap-2 px-8"
-                      data-testid="button-end-clip"
-                    >
-                      <Square className="w-5 h-5" />
-                      End Clip
-                    </Button>
-                    <kbd className="mt-1 text-[10px] text-muted-foreground/60">press S</kbd>
+            <div className="flex justify-center">
+              {isRecording ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
+                    </span>
+                    Recording from {formatTime(clipStartMs!)}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-1">
-                    <Button
-                      size="lg"
-                      onClick={handleStartClipLive}
-                      className="gap-2 px-8"
-                      data-testid="button-start-clip"
-                    >
-                      <Circle className="w-5 h-5" />
-                      Start Clip
-                    </Button>
-                    <kbd className="text-[10px] text-muted-foreground/60">press S</kbd>
-                  </div>
-                )}
-              </div>
-            )}
+                  <Button
+                    size="lg"
+                    variant="destructive"
+                    onClick={handleEndClipLive}
+                    className="gap-2 px-8"
+                    data-testid="button-end-clip"
+                  >
+                    <Square className="w-5 h-5" />
+                    End Clip
+                  </Button>
+                  <kbd className="mt-1 text-[10px] text-muted-foreground/60">press S</kbd>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    size="lg"
+                    onClick={handleStartClipLive}
+                    className="gap-2 px-8"
+                    data-testid="button-start-clip"
+                  >
+                    <Circle className="w-5 h-5" />
+                    Start Clip
+                  </Button>
+                  <kbd className="text-[10px] text-muted-foreground/60">press S</kbd>
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <>
@@ -746,7 +701,6 @@ export default function NowPlaying() {
                       setStopwatchMs(0);
                       stopwatchOffsetRef.current = 0;
                       setClipStartMs(null);
-                      setCapturedClip(null);
                     }}
                     data-testid="button-change-episode"
                   >
@@ -808,59 +762,48 @@ export default function NowPlaying() {
                   </CardContent>
                 </Card>
 
-                {capturedClip ? (
-                  <ClipSaveForm
-                    capturedClip={capturedClip}
-                    clipNote={clipNote}
-                    setClipNote={setClipNote}
-                    onSave={handleSaveClip}
-                    onCancel={handleCancelClip}
-                    isPending={createMutation.isPending}
-                  />
-                ) : (
-                  <div className="flex justify-center">
-                    {isRecording ? (
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
-                          </span>
-                          Recording from {formatTime(clipStartMs!)}
-                          <Badge variant="secondary" className="gap-1 ml-2">
-                            <Clock className="w-3 h-3" />
-                            {formatTime(stopwatchMs - clipStartMs!)}
-                          </Badge>
-                        </div>
-                        <Button
-                          size="lg"
-                          variant="destructive"
-                          onClick={handleEndClipManual}
-                          className="gap-2 px-8"
-                          data-testid="button-end-clip"
-                        >
-                          <Square className="w-5 h-5" />
-                          End Clip
-                        </Button>
-                        <kbd className="mt-1 text-[10px] text-muted-foreground/60">press S</kbd>
+                <div className="flex justify-center">
+                  {isRecording ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
+                        </span>
+                        Recording from {formatTime(clipStartMs!)}
+                        <Badge variant="secondary" className="gap-1 ml-2">
+                          <Clock className="w-3 h-3" />
+                          {formatTime(stopwatchMs - clipStartMs!)}
+                        </Badge>
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1">
-                        <Button
-                          size="lg"
-                          onClick={handleStartClipManual}
-                          className="gap-2 px-8"
-                          disabled={!stopwatchRunning && stopwatchMs === 0}
-                          data-testid="button-start-clip"
-                        >
-                          <Circle className="w-5 h-5" />
-                          Start Clip
-                        </Button>
-                        <kbd className="text-[10px] text-muted-foreground/60">press S</kbd>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      <Button
+                        size="lg"
+                        variant="destructive"
+                        onClick={handleEndClipManual}
+                        className="gap-2 px-8"
+                        data-testid="button-end-clip"
+                      >
+                        <Square className="w-5 h-5" />
+                        End Clip
+                      </Button>
+                      <kbd className="mt-1 text-[10px] text-muted-foreground/60">press S</kbd>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1">
+                      <Button
+                        size="lg"
+                        onClick={handleStartClipManual}
+                        className="gap-2 px-8"
+                        disabled={!stopwatchRunning && stopwatchMs === 0}
+                        data-testid="button-start-clip"
+                      >
+                        <Circle className="w-5 h-5" />
+                        Start Clip
+                      </Button>
+                      <kbd className="text-[10px] text-muted-foreground/60">press S</kbd>
+                    </div>
+                  )}
+                </div>
 
                 {!manualEpisode.id.startsWith("itunes-") && (
                   <div className="flex justify-center">
@@ -934,74 +877,3 @@ export default function NowPlaying() {
   );
 }
 
-function ClipSaveForm({
-  capturedClip,
-  clipNote,
-  setClipNote,
-  onSave,
-  onCancel,
-  isPending,
-}: {
-  capturedClip: CapturedClip;
-  clipNote: string;
-  setClipNote: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  isPending: boolean;
-}) {
-  return (
-    <Card data-testid="captured-clip-form">
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="font-semibold text-sm text-foreground">Save Clip</h3>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="gap-1">
-              <Clock className="w-3 h-3" />
-              {formatTime(capturedClip.startMs)}
-            </Badge>
-            <span className="text-xs text-muted-foreground">to</span>
-            <Badge variant="secondary" className="gap-1">
-              <Clock className="w-3 h-3" />
-              {formatTime(capturedClip.endMs)}
-            </Badge>
-          </div>
-        </div>
-        <Badge variant="outline" className="text-xs text-muted-foreground">
-          Duration: {formatTime(capturedClip.endMs - capturedClip.startMs)}
-        </Badge>
-        <Textarea
-          placeholder="Add a note about this moment..."
-          value={clipNote}
-          onChange={(e) => setClipNote(e.target.value)}
-          className="resize-none"
-          rows={2}
-          data-testid="input-clip-note"
-        />
-        <div className="flex gap-2 justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            data-testid="button-cancel-clip"
-          >
-            <X className="w-4 h-4 mr-1" />
-            Discard
-          </Button>
-          <Button
-            size="sm"
-            onClick={onSave}
-            disabled={isPending}
-            data-testid="button-save-clip"
-          >
-            {isPending ? (
-              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-            ) : (
-              <Check className="w-4 h-4 mr-1" />
-            )}
-            {isPending ? "Saving..." : "Save Clip"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
