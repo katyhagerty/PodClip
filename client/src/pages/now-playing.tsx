@@ -64,6 +64,65 @@ interface ManualEpisode {
 
 type Mode = "loading" | "live" | "manual";
 
+function TimeInput({ valueMs, onChange }: { valueMs: number; onChange: (ms: number) => void }) {
+  const totalSeconds = Math.floor(valueMs / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+
+  const clamp = (v: number, max: number) => Math.max(0, Math.min(max, v));
+
+  const update = (newH: number, newM: number, newS: number) => {
+    onChange(((newH * 3600) + (newM * 60) + newS) * 1000);
+  };
+
+  const fieldClass =
+    "w-16 text-center text-4xl font-mono font-bold bg-transparent border-b-2 border-muted-foreground/30 focus:border-primary focus:outline-none tabular-nums py-1";
+
+  return (
+    <div className="flex items-end gap-1">
+      <div className="flex flex-col items-center">
+        <span className="text-[10px] text-muted-foreground mb-1">HR</span>
+        <input
+          type="number"
+          min={0}
+          max={23}
+          value={h}
+          onChange={(e) => update(clamp(parseInt(e.target.value) || 0, 23), m, s)}
+          className={fieldClass}
+          data-testid="input-time-hours"
+        />
+      </div>
+      <span className="text-4xl font-mono font-bold text-muted-foreground pb-1">:</span>
+      <div className="flex flex-col items-center">
+        <span className="text-[10px] text-muted-foreground mb-1">MIN</span>
+        <input
+          type="number"
+          min={0}
+          max={59}
+          value={m.toString().padStart(2, "0")}
+          onChange={(e) => update(h, clamp(parseInt(e.target.value) || 0, 59), s)}
+          className={fieldClass}
+          data-testid="input-time-minutes"
+        />
+      </div>
+      <span className="text-4xl font-mono font-bold text-muted-foreground pb-1">:</span>
+      <div className="flex flex-col items-center">
+        <span className="text-[10px] text-muted-foreground mb-1">SEC</span>
+        <input
+          type="number"
+          min={0}
+          max={59}
+          value={s.toString().padStart(2, "0")}
+          onChange={(e) => update(h, m, clamp(parseInt(e.target.value) || 0, 59))}
+          className={fieldClass}
+          data-testid="input-time-seconds"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function NowPlaying() {
   const { toast } = useToast();
   const [clipStartMs, setClipStartMs] = useState<number | null>(null);
@@ -674,11 +733,25 @@ export default function NowPlaying() {
                 <Card data-testid="stopwatch-card">
                   <CardContent className="p-4 flex flex-col items-center gap-4">
                     <p className="text-xs text-muted-foreground">
-                      Sync this timer with your Spotify playback
+                      {stopwatchRunning
+                        ? "Timer running — tracking your position"
+                        : "Set your current position, then press play"}
                     </p>
-                    <div className="text-4xl font-mono font-bold text-foreground tabular-nums" data-testid="text-stopwatch-time">
-                      {formatTime(stopwatchMs)}
-                    </div>
+                    {stopwatchRunning ? (
+                      <div className="text-4xl font-mono font-bold text-foreground tabular-nums" data-testid="text-stopwatch-time">
+                        {formatTime(stopwatchMs)}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5" data-testid="text-stopwatch-time">
+                        <TimeInput
+                          valueMs={stopwatchMs}
+                          onChange={(ms) => {
+                            setStopwatchMs(ms);
+                            stopwatchOffsetRef.current = ms;
+                          }}
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center gap-3">
                       <Button
                         size="icon"
@@ -696,14 +769,16 @@ export default function NowPlaying() {
                         variant="outline"
                         size="sm"
                         onClick={handleResetStopwatch}
-                        disabled={stopwatchMs === 0}
+                        disabled={stopwatchMs === 0 && !stopwatchRunning}
                         data-testid="button-stopwatch-reset"
                       >
                         Reset
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground text-center max-w-xs">
-                      Press play here when you press play in Spotify. The timer tracks your listening position so you can mark clips.
+                      {stopwatchRunning
+                        ? "Pause anytime. Your position is saved."
+                        : "Enter the timestamp from Spotify, then press play to start tracking."}
                     </p>
                   </CardContent>
                 </Card>

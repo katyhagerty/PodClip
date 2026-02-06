@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+input[type="number"].tabular-nums::-webkit-outer-spin-button,
+input[type="number"].tabular-nums::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"].tabular-nums {
+  -moz-appearance: textfield;
+}
+
 /* LIGHT MODE - Spotify-inspired */
 :root {
   --button-outline: rgba(0,0,0, .10);
