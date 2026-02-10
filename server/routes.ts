@@ -199,6 +199,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/episode-transcripts/completed", async (_req, res) => {
+    try {
+      const transcripts = await storage.getCompletedEpisodeTranscripts();
+      res.json(transcripts);
+    } catch (error) {
+      console.error("Error fetching completed transcripts:", error);
+      res.status(500).json({ error: "Failed to fetch completed transcripts" });
+    }
+  });
+
   app.get("/api/episode-transcripts/statuses", async (_req, res) => {
     try {
       const statuses = await storage.getAllEpisodeTranscriptStatuses();

@@ -28,6 +28,7 @@ export interface IStorage {
   getEpisodeTranscript(id: string): Promise<EpisodeTranscript | undefined>;
   getEpisodeTranscriptByEpisodeId(episodeId: string): Promise<EpisodeTranscript | undefined>;
   getAllEpisodeTranscriptStatuses(): Promise<Pick<EpisodeTranscript, "episodeId" | "status" | "progress">[]>;
+  getCompletedEpisodeTranscripts(): Promise<Pick<EpisodeTranscript, "id" | "episodeId" | "episodeName" | "showName" | "showImageUrl" | "status" | "createdAt">[]>;
   createEpisodeTranscript(transcript: InsertEpisodeTranscript): Promise<EpisodeTranscript>;
   updateEpisodeTranscript(id: string, fields: Partial<InsertEpisodeTranscript>): Promise<EpisodeTranscript | undefined>;
 }
@@ -83,6 +84,22 @@ export class DatabaseStorage implements IStorage {
   async deleteBookmark(id: string): Promise<boolean> {
     const result = await db.delete(bookmarks).where(eq(bookmarks.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getCompletedEpisodeTranscripts(): Promise<Pick<EpisodeTranscript, "id" | "episodeId" | "episodeName" | "showName" | "showImageUrl" | "status" | "createdAt">[]> {
+    return db
+      .select({
+        id: episodeTranscripts.id,
+        episodeId: episodeTranscripts.episodeId,
+        episodeName: episodeTranscripts.episodeName,
+        showName: episodeTranscripts.showName,
+        showImageUrl: episodeTranscripts.showImageUrl,
+        status: episodeTranscripts.status,
+        createdAt: episodeTranscripts.createdAt,
+      })
+      .from(episodeTranscripts)
+      .where(eq(episodeTranscripts.status, "completed"))
+      .orderBy(desc(episodeTranscripts.createdAt));
   }
 
   async getAllEpisodeTranscriptStatuses(): Promise<Pick<EpisodeTranscript, "episodeId" | "status" | "progress">[]> {

@@ -41,6 +41,16 @@ interface TranscriptStatus {
   progress: number;
 }
 
+interface CompletedTranscript {
+  id: string;
+  episodeId: string;
+  episodeName: string;
+  showName: string;
+  showImageUrl: string | null;
+  status: string;
+  createdAt: string;
+}
+
 interface Episode {
   id: string;
   name: string;
@@ -74,6 +84,10 @@ export default function TranscriptPage() {
 
   const { data: transcriptStatuses } = useQuery<TranscriptStatus[]>({
     queryKey: ["/api/episode-transcripts/statuses"],
+  });
+
+  const { data: completedTranscripts } = useQuery<CompletedTranscript[]>({
+    queryKey: ["/api/episode-transcripts/completed"],
   });
 
   const getTranscriptStatus = (episodeId: string): TranscriptStatus | undefined => {
@@ -246,6 +260,21 @@ export default function TranscriptPage() {
 
   const handleSelectEpisode = (episode: Episode) => {
     setSelectedEpisode(episode);
+    setEpisodeSearchQuery("");
+    setDebouncedEpisodeSearch("");
+  };
+
+  const handleSelectCompletedTranscript = (ct: CompletedTranscript) => {
+    setSelectedEpisode({
+      id: ct.episodeId,
+      name: ct.episodeName,
+      showName: ct.showName,
+      showImageUrl: ct.showImageUrl,
+      description: "",
+      durationMs: 0,
+      audioUrl: null,
+    });
+    setTranscriptId(ct.id);
     setEpisodeSearchQuery("");
     setDebouncedEpisodeSearch("");
   };
@@ -560,6 +589,46 @@ export default function TranscriptPage() {
               <div className="mt-8">
                 <Podcast className="w-10 h-10 text-muted-foreground/50 mx-auto mb-2" />
                 <p className="text-muted-foreground text-sm">No episodes found. Try a different search.</p>
+              </div>
+            )}
+
+            {completedTranscripts && completedTranscripts.length > 0 && !searchResults && !searchLoading && (
+              <div className="w-full mt-8" data-testid="completed-transcripts-section">
+                <h3 className="text-sm font-medium text-muted-foreground mb-3 text-left">Your Transcripts</h3>
+                <div className="space-y-2">
+                  {completedTranscripts.map((ct) => (
+                    <Card
+                      key={ct.id}
+                      className="hover-elevate cursor-pointer"
+                      onClick={() => handleSelectCompletedTranscript(ct)}
+                      data-testid={`completed-transcript-${ct.episodeId}`}
+                    >
+                      <CardContent className="flex gap-3 p-3">
+                        {ct.showImageUrl ? (
+                          <img
+                            src={ct.showImageUrl}
+                            alt={ct.showName}
+                            className="w-14 h-14 rounded-md object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+                            <Podcast className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0 text-left">
+                          <h4 className="font-medium text-sm truncate">{ct.episodeName}</h4>
+                          <p className="text-xs text-muted-foreground truncate">{ct.showName}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-xs gap-1 text-green-600 dark:text-green-400 border-green-500/30">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Transcript ready
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
           </div>
