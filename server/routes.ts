@@ -199,6 +199,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/episode-transcripts/statuses", async (_req, res) => {
+    try {
+      const statuses = await storage.getAllEpisodeTranscriptStatuses();
+      res.json(statuses);
+    } catch (error) {
+      console.error("Error fetching transcript statuses:", error);
+      res.status(500).json({ error: "Failed to fetch transcript statuses" });
+    }
+  });
+
   app.post("/api/episode-transcripts", async (req, res) => {
     try {
       const { episodeId, episodeName, showName, showImageUrl, audioUrl } = req.body;

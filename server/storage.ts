@@ -27,6 +27,7 @@ export interface IStorage {
   
   getEpisodeTranscript(id: string): Promise<EpisodeTranscript | undefined>;
   getEpisodeTranscriptByEpisodeId(episodeId: string): Promise<EpisodeTranscript | undefined>;
+  getAllEpisodeTranscriptStatuses(): Promise<Pick<EpisodeTranscript, "episodeId" | "status" | "progress">[]>;
   createEpisodeTranscript(transcript: InsertEpisodeTranscript): Promise<EpisodeTranscript>;
   updateEpisodeTranscript(id: string, fields: Partial<InsertEpisodeTranscript>): Promise<EpisodeTranscript | undefined>;
 }
@@ -82,6 +83,16 @@ export class DatabaseStorage implements IStorage {
   async deleteBookmark(id: string): Promise<boolean> {
     const result = await db.delete(bookmarks).where(eq(bookmarks.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getAllEpisodeTranscriptStatuses(): Promise<Pick<EpisodeTranscript, "episodeId" | "status" | "progress">[]> {
+    return db
+      .select({
+        episodeId: episodeTranscripts.episodeId,
+        status: episodeTranscripts.status,
+        progress: episodeTranscripts.progress,
+      })
+      .from(episodeTranscripts);
   }
 
   async getEpisodeTranscript(id: string): Promise<EpisodeTranscript | undefined> {

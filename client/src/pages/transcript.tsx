@@ -22,6 +22,7 @@ import {
   Podcast,
   AlertCircle,
   ExternalLink,
+  CheckCircle2,
 } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -32,6 +33,12 @@ interface ClipInfo {
   startMs: number;
   endMs: number;
   note: string;
+}
+
+interface TranscriptStatus {
+  episodeId: string;
+  status: string;
+  progress: number;
 }
 
 interface Episode {
@@ -64,6 +71,14 @@ export default function TranscriptPage() {
   const { data: bookmarks } = useQuery<BookmarkType[]>({
     queryKey: ["/api/bookmarks"],
   });
+
+  const { data: transcriptStatuses } = useQuery<TranscriptStatus[]>({
+    queryKey: ["/api/episode-transcripts/statuses"],
+  });
+
+  const getTranscriptStatus = (episodeId: string): TranscriptStatus | undefined => {
+    return transcriptStatuses?.find((t) => t.episodeId === episodeId);
+  };
 
   const episodeClips: ClipInfo[] = (bookmarks || [])
     .filter((b) => selectedEpisode && b.episodeId === selectedEpisode.id && b.note)
@@ -493,7 +508,7 @@ export default function TranscriptPage() {
                       <div className="flex-1 min-w-0 text-left">
                         <h4 className="font-medium text-sm truncate">{episode.name}</h4>
                         <p className="text-xs text-muted-foreground truncate">{episode.showName}</p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 flex-wrap mt-1">
                           {episode.durationMs > 0 && (
                             <Badge variant="outline" className="text-xs">
                               {formatTime(episode.durationMs)}
@@ -504,6 +519,35 @@ export default function TranscriptPage() {
                           ) : (
                             <Badge variant="outline" className="text-xs text-muted-foreground">No audio</Badge>
                           )}
+                          {(() => {
+                            const ts = getTranscriptStatus(episode.id);
+                            if (!ts) return null;
+                            if (ts.status === "completed") {
+                              return (
+                                <Badge variant="outline" className="text-xs gap-1 text-green-600 dark:text-green-400 border-green-500/30" data-testid={`badge-transcript-completed-${episode.id}`}>
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Transcript ready
+                                </Badge>
+                              );
+                            }
+                            if (ts.status === "processing" || ts.status === "pending") {
+                              return (
+                                <Badge variant="outline" className="text-xs gap-1 text-blue-600 dark:text-blue-400 border-blue-500/30" data-testid={`badge-transcript-processing-${episode.id}`}>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  {ts.status === "processing" ? `${ts.progress}%` : "Pending"}
+                                </Badge>
+                              );
+                            }
+                            if (ts.status === "error") {
+                              return (
+                                <Badge variant="outline" className="text-xs gap-1 text-red-600 dark:text-red-400 border-red-500/30" data-testid={`badge-transcript-error-${episode.id}`}>
+                                  <AlertCircle className="w-3 h-3" />
+                                  Transcript failed
+                                </Badge>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       </div>
                     </CardContent>
