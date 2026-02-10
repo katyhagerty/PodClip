@@ -28,6 +28,11 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "wouter";
 import type { EpisodeTranscript, TranscriptSegment, Bookmark as BookmarkType } from "@shared/schema";
 
+interface ClippedRange {
+  startMs: number;
+  endMs: number;
+}
+
 interface Episode {
   id: string;
   name: string;
@@ -54,6 +59,23 @@ export default function TranscriptPage() {
   } | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  const { data: bookmarks } = useQuery<BookmarkType[]>({
+    queryKey: ["/api/bookmarks"],
+  });
+
+  const clippedRanges: ClippedRange[] = (bookmarks || [])
+    .filter((b) => selectedEpisode && b.episodeId === selectedEpisode.id)
+    .map((b) => ({
+      startMs: b.timestampMs,
+      endMs: b.timestampMs + (b.durationMs || 0),
+    }));
+
+  const isSegmentClipped = (segment: TranscriptSegment): boolean => {
+    return clippedRanges.some(
+      (range) => segment.startMs < range.endMs && segment.endMs > range.startMs
+    );
+  };
 
   const { data: searchResults, isLoading: searchLoading } = useQuery<Episode[]>({
     queryKey: ["/api/spotify/search", { q: debouncedEpisodeSearch }],
@@ -587,6 +609,12 @@ export default function TranscriptPage() {
                       Completed
                     </Badge>
                   )}
+                  {clippedRanges.length > 0 && (
+                    <Badge variant="outline" className="gap-1 text-green-600 dark:text-green-400 border-green-500/30">
+                      <Bookmark className="w-3 h-3" />
+                      {clippedRanges.length} clip{clippedRanges.length !== 1 ? "s" : ""} saved
+                    </Badge>
+                  )}
                   <p className="text-xs text-muted-foreground ml-auto">
                     Highlight text to save as a clip
                   </p>
@@ -598,6 +626,7 @@ export default function TranscriptPage() {
                       const isMatch = transcriptSearch.trim() &&
                         segment.text.toLowerCase().includes(transcriptSearch.toLowerCase());
                       const isCurrentMatch = searchMatches.length > 0 && searchMatches[searchMatchIndex]?.index === index;
+                      const clipped = isSegmentClipped(segment);
 
                       return (
                         <div
@@ -608,10 +637,15 @@ export default function TranscriptPage() {
                               ? "bg-primary/10 ring-1 ring-primary/30"
                               : isMatch
                               ? "bg-muted/50"
+                              : clipped
+                              ? "bg-green-500/10 dark:bg-green-400/10 border-l-2 border-green-500/40 dark:border-green-400/40"
                               : ""
                           }`}
                           data-testid={`segment-${index}`}
                         >
+                          {clipped && (
+                            <Bookmark className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                          )}
                           <button
                             className="flex-shrink-0 text-xs text-muted-foreground font-mono w-16 text-right pt-0.5 hover:text-primary transition-colors"
                             onClick={() => {
