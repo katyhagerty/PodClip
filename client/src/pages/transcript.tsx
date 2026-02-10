@@ -129,7 +129,7 @@ export default function TranscriptPage() {
       parts.push(
         <mark
           key={`c-${i}`}
-          className="dark:bg-green-500/50 rounded-sm px-0.5 font-medium bg-[#1cb955]"
+          className="dark:bg-green-500/50 rounded-sm px-0.5 font-medium bg-[#1cb955] text-[#fafafa]"
           data-testid={`clip-highlight-${i}`}
         >
           {highlightText(text.slice(range.start, range.end), searchQuery)}
