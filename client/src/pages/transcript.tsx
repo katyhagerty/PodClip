@@ -28,9 +28,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "wouter";
 import type { EpisodeTranscript, TranscriptSegment, Bookmark as BookmarkType } from "@shared/schema";
 
-interface ClippedRange {
+interface ClipInfo {
   startMs: number;
   endMs: number;
+  note: string;
 }
 
 interface Episode {
@@ -64,17 +65,82 @@ export default function TranscriptPage() {
     queryKey: ["/api/bookmarks"],
   });
 
-  const clippedRanges: ClippedRange[] = (bookmarks || [])
-    .filter((b) => selectedEpisode && b.episodeId === selectedEpisode.id)
+  const episodeClips: ClipInfo[] = (bookmarks || [])
+    .filter((b) => selectedEpisode && b.episodeId === selectedEpisode.id && b.note)
     .map((b) => ({
       startMs: b.timestampMs,
       endMs: b.timestampMs + (b.durationMs || 0),
+      note: b.note!,
     }));
 
-  const isSegmentClipped = (segment: TranscriptSegment): boolean => {
-    return clippedRanges.some(
-      (range) => segment.startMs < range.endMs && segment.endMs > range.startMs
-    );
+  const findClipTextInSegment = (segmentText: string, note: string): string | null => {
+    if (segmentText.includes(note)) return note;
+    if (note.includes(segmentText)) return segmentText;
+    const minLen = 10;
+    for (let len = Math.min(segmentText.length, note.length); len >= minLen; len--) {
+      const suffix = segmentText.slice(segmentText.length - len);
+      if (note.startsWith(suffix)) return suffix;
+    }
+    for (let len = Math.min(segmentText.length, note.length); len >= minLen; len--) {
+      const prefix = segmentText.slice(0, len);
+      if (note.endsWith(prefix)) return prefix;
+    }
+    return null;
+  };
+
+  const getClipHighlightsForSegment = (segment: TranscriptSegment): string[] => {
+    const matches: string[] = [];
+    for (const clip of episodeClips) {
+      if (segment.startMs >= clip.endMs || segment.endMs <= clip.startMs) continue;
+      const match = findClipTextInSegment(segment.text, clip.note);
+      if (match) matches.push(match);
+    }
+    return matches;
+  };
+
+  const renderSegmentText = (text: string, clipMatches: string[], searchQuery: string): React.ReactNode => {
+    if (clipMatches.length === 0) return highlightText(text, searchQuery);
+
+    const ranges: Array<{ start: number; end: number }> = [];
+    for (const match of clipMatches) {
+      const idx = text.indexOf(match);
+      if (idx >= 0) ranges.push({ start: idx, end: idx + match.length });
+    }
+    if (ranges.length === 0) return highlightText(text, searchQuery);
+
+    ranges.sort((a, b) => a.start - b.start);
+    const merged: Array<{ start: number; end: number }> = [ranges[0]];
+    for (let i = 1; i < ranges.length; i++) {
+      const last = merged[merged.length - 1];
+      if (ranges[i].start <= last.end) {
+        last.end = Math.max(last.end, ranges[i].end);
+      } else {
+        merged.push(ranges[i]);
+      }
+    }
+
+    const parts: React.ReactNode[] = [];
+    let pos = 0;
+    for (let i = 0; i < merged.length; i++) {
+      const range = merged[i];
+      if (pos < range.start) {
+        parts.push(<span key={`t-${i}`}>{highlightText(text.slice(pos, range.start), searchQuery)}</span>);
+      }
+      parts.push(
+        <mark
+          key={`c-${i}`}
+          className="bg-green-200/70 dark:bg-green-700/40 rounded-sm px-0.5"
+          data-testid={`clip-highlight-${i}`}
+        >
+          {highlightText(text.slice(range.start, range.end), searchQuery)}
+        </mark>
+      );
+      pos = range.end;
+    }
+    if (pos < text.length) {
+      parts.push(<span key="tail">{highlightText(text.slice(pos), searchQuery)}</span>);
+    }
+    return parts;
   };
 
   const { data: searchResults, isLoading: searchLoading } = useQuery<Episode[]>({
@@ -609,10 +675,10 @@ export default function TranscriptPage() {
                       Completed
                     </Badge>
                   )}
-                  {clippedRanges.length > 0 && (
+                  {episodeClips.length > 0 && (
                     <Badge variant="outline" className="gap-1 text-green-600 dark:text-green-400 border-green-500/30">
                       <Bookmark className="w-3 h-3" />
-                      {clippedRanges.length} clip{clippedRanges.length !== 1 ? "s" : ""} saved
+                      {episodeClips.length} clip{episodeClips.length !== 1 ? "s" : ""} saved
                     </Badge>
                   )}
                   <p className="text-xs text-muted-foreground ml-auto">
@@ -626,7 +692,7 @@ export default function TranscriptPage() {
                       const isMatch = transcriptSearch.trim() &&
                         segment.text.toLowerCase().includes(transcriptSearch.toLowerCase());
                       const isCurrentMatch = searchMatches.length > 0 && searchMatches[searchMatchIndex]?.index === index;
-                      const clipped = isSegmentClipped(segment);
+                      const clipMatches = getClipHighlightsForSegment(segment);
 
                       return (
                         <div
@@ -637,15 +703,10 @@ export default function TranscriptPage() {
                               ? "bg-primary/10 ring-1 ring-primary/30"
                               : isMatch
                               ? "bg-muted/50"
-                              : clipped
-                              ? "bg-green-500/10 dark:bg-green-400/10 border-l-2 border-green-500/40 dark:border-green-400/40"
                               : ""
                           }`}
                           data-testid={`segment-${index}`}
                         >
-                          {clipped && (
-                            <Bookmark className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                          )}
                           <button
                             className="flex-shrink-0 text-xs text-muted-foreground font-mono w-16 text-right pt-0.5 hover:text-primary transition-colors"
                             onClick={() => {
@@ -661,7 +722,7 @@ export default function TranscriptPage() {
                             {formatTime(segment.startMs)}
                           </button>
                           <p className="text-sm leading-relaxed flex-1 select-text">
-                            {highlightText(segment.text, transcriptSearch)}
+                            {renderSegmentText(segment.text, clipMatches, transcriptSearch)}
                           </p>
                         </div>
                       );
