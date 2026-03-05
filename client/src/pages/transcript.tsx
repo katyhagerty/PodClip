@@ -235,6 +235,7 @@ export default function TranscriptPage() {
       timestampMs: number;
       durationMs: number;
       note: string;
+      transcript?: string;
     }) => apiRequest("POST", "/api/bookmarks", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookmarks"] });
@@ -370,6 +371,7 @@ export default function TranscriptPage() {
       timestampMs: selectedText.startMs,
       durationMs: selectedText.endMs - selectedText.startMs,
       note: selectedText.text.slice(0, 500),
+      transcript: selectedText.text,
     });
   };
 
