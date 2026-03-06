@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { formatTime } from "@/lib/utils";
 import {
   Search,
@@ -63,6 +64,7 @@ interface Episode {
 
 export default function TranscriptPage() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [episodeSearchQuery, setEpisodeSearchQuery] = useState("");
   const [debouncedEpisodeSearch, setDebouncedEpisodeSearch] = useState("");
@@ -342,11 +344,15 @@ export default function TranscriptPage() {
 
   useEffect(() => {
     document.addEventListener("mouseup", handleTextSelection);
-    return () => document.removeEventListener("mouseup", handleTextSelection);
+    document.addEventListener("touchend", handleTextSelection);
+    return () => {
+      document.removeEventListener("mouseup", handleTextSelection);
+      document.removeEventListener("touchend", handleTextSelection);
+    };
   }, [handleTextSelection]);
 
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
+    const handleDismiss = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest("[data-save-clip-popup]")) {
         const selection = window.getSelection();
@@ -356,8 +362,12 @@ export default function TranscriptPage() {
         }
       }
     };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("mousedown", handleDismiss);
+    document.addEventListener("touchstart", handleDismiss);
+    return () => {
+      document.removeEventListener("mousedown", handleDismiss);
+      document.removeEventListener("touchstart", handleDismiss);
+    };
   }, []);
 
   const handleSaveClip = () => {
@@ -844,7 +854,7 @@ export default function TranscriptPage() {
                     })}
                   </div>
 
-                  {selectedText && selectionPosition && (
+                  {selectedText && selectionPosition && !isMobile && (
                     <div
                       data-save-clip-popup
                       className="absolute z-50 bg-card border rounded-lg shadow-lg p-3 min-w-[200px]"
@@ -883,6 +893,41 @@ export default function TranscriptPage() {
           </div>
         )}
       </main>
+
+      {selectedText && isMobile && (
+        <div
+          data-save-clip-popup
+          className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t shadow-lg p-4"
+          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+          data-testid="save-clip-popup-mobile"
+        >
+          <div className="container max-w-4xl mx-auto flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
+                <Clock className="w-3 h-3 flex-shrink-0" />
+                {formatTime(selectedText.startMs)} - {formatTime(selectedText.endMs)}
+              </div>
+              <p className="text-xs text-muted-foreground truncate">
+                "{selectedText.text.slice(0, 80)}{selectedText.text.length > 80 ? "..." : ""}"
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleSaveClip}
+              disabled={saveClipMutation.isPending}
+              className="flex-shrink-0"
+              data-testid="button-save-highlighted-clip-mobile"
+            >
+              {saveClipMutation.isPending ? (
+                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+              ) : (
+                <Bookmark className="w-3 h-3 mr-1.5" />
+              )}
+              Save Clip
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -129,7 +129,18 @@ The `/transcript` page allows users to generate full episode transcripts:
 ### Key NPM Dependencies
 - `drizzle-orm` / `drizzle-zod` - Database ORM and validation
 - `@tanstack/react-query` - Data fetching and caching
-- `@radix-ui/*` - Accessible UI primitives
+- `@radix-ui/*` - Accessible UI primitives (including AlertDialog for delete confirmation)
 - `tailwindcss` - Utility-first CSS
 - `zod` - Runtime type validation
 - `react-hook-form` - Form handling with Zod integration
+
+### SEO & Mobile Web App
+- Open Graph and Twitter Card meta tags in `client/index.html`
+- Apple mobile web app meta tags for iOS home screen support
+- Viewport allows user zooming (no maximum-scale restriction)
+- Transcript page save popup renders as fixed bottom bar on mobile for better touch UX
+- Text selection on transcript page supports both mouse and touch events
+
+### UX Polish
+- Delete confirmation dialog on bookmark cards prevents accidental deletions
+- Clips saved from transcript highlighting include full transcript text for dropdown display

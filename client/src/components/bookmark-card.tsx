@@ -2,6 +2,17 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Play, Trash2, Edit2, Clock, ExternalLink, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { formatTime, formatRelativeDate } from "@/lib/utils";
 import type { Bookmark } from "@shared/schema";
@@ -68,14 +79,35 @@ export function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) 
                 >
                   <Edit2 className="w-4 h-4" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onDelete(bookmark.id)}
-                  data-testid={`button-delete-${bookmark.id}`}
-                >
-                  <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      data-testid={`button-delete-${bookmark.id}`}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent data-testid={`dialog-delete-confirm-${bookmark.id}`}>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete clip</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete this clip? This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid={`button-cancel-delete-${bookmark.id}`}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => onDelete(bookmark.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        data-testid={`button-confirm-delete-${bookmark.id}`}
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
 
