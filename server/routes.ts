@@ -1,20 +1,76 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBookmarkSchema, patchBookmarkSchema } from "@shared/schema";
+import { insertBookmarkSchema, patchBookmarkSchema, insertUserSchema } from "@shared/schema";
 import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId, getCurrentPlayback, pausePlayback, resumePlayback, seekPlayback } from "./spotify";
 import { transcribeClip } from "./transcribe";
 import { transcribeFullEpisode } from "./transcribe-episode";
+import { setupAuth, requireAuth, hashPassword } from "./auth";
+import passport from "passport";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   
-  // Get all bookmarks
-  app.get("/api/bookmarks", async (req, res) => {
+  app.post("/api/auth/register", async (req, res, next) => {
     try {
-      const bookmarks = await storage.getBookmarks();
+      const parsed = insertUserSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const existingUser = await storage.getUserByUsername(parsed.data.username);
+      if (existingUser) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+
+      const hashedPassword = await hashPassword(parsed.data.password);
+      const user = await storage.createUser({
+        ...parsed.data,
+        password: hashedPassword,
+      });
+
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.status(201).json({ id: user.id, username: user.username });
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ error: info?.message || "Invalid username or password" });
+      }
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.json({ id: user.id, username: user.username });
+      });
+    })(req, res, next);
+  });
+
+  app.post("/api/auth/logout", (req, res, next) => {
+    req.logout((err) => {
+      if (err) return next(err);
+      res.sendStatus(200);
+    });
+  });
+
+  app.get("/api/user", (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "Not logged in" });
+    }
+    res.json({ id: req.user.id, username: req.user.username });
+  });
+
+  // Get all bookmarks
+  app.get("/api/bookmarks", requireAuth, async (req, res) => {
+    try {
+      const bookmarks = await storage.getBookmarks(req.user!.id);
       res.json(bookmarks);
     } catch (error) {
       console.error("Error fetching bookmarks:", error);
@@ -23,10 +79,11 @@ export async function registerRoutes(
   });
 
   // Get single bookmark
-  app.get("/api/bookmarks/:id", async (req, res) => {
+  app.get("/api/bookmarks/:id", requireAuth, async (req, res) => {
     try {
-      const bookmark = await storage.getBookmark(req.params.id);
-      if (!bookmark) {
+      const id = req.params.id as string;
+      const bookmark = await storage.getBookmark(id);
+      if (!bookmark || bookmark.userId !== req.user!.id) {
         return res.status(404).json({ error: "Bookmark not found" });
       }
       res.json(bookmark);
@@ -37,7 +94,7 @@ export async function registerRoutes(
   });
 
   // Create bookmark
-  app.post("/api/bookmarks", async (req, res) => {
+  app.post("/api/bookmarks", requireAuth, async (req, res) => {
     try {
       const parsed = insertBookmarkSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -50,7 +107,7 @@ export async function registerRoutes(
           data.episodeId = spotifyId;
         }
       }
-      const bookmark = await storage.createBookmark(data);
+      const bookmark = await storage.createBookmark({ ...data, userId: req.user!.id });
       res.status(201).json(bookmark);
     } catch (error) {
       console.error("Error creating bookmark:", error);
@@ -59,13 +116,14 @@ export async function registerRoutes(
   });
 
   // Update bookmark
-  app.put("/api/bookmarks/:id", async (req, res) => {
+  app.put("/api/bookmarks/:id", requireAuth, async (req, res) => {
     try {
+      const id = req.params.id as string;
       const parsed = insertBookmarkSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.message });
       }
-      const bookmark = await storage.updateBookmark(req.params.id, parsed.data);
+      const bookmark = await storage.updateBookmark(id, parsed.data, req.user!.id);
       if (!bookmark) {
         return res.status(404).json({ error: "Bookmark not found" });
       }
@@ -76,13 +134,14 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/bookmarks/:id", async (req, res) => {
+  app.patch("/api/bookmarks/:id", requireAuth, async (req, res) => {
     try {
+      const id = req.params.id as string;
       const parsed = patchBookmarkSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.message });
       }
-      const bookmark = await storage.patchBookmark(req.params.id, parsed.data);
+      const bookmark = await storage.patchBookmark(id, parsed.data, req.user!.id);
       if (!bookmark) {
         return res.status(404).json({ error: "Bookmark not found" });
       }
@@ -94,9 +153,10 @@ export async function registerRoutes(
   });
 
   // Delete bookmark
-  app.delete("/api/bookmarks/:id", async (req, res) => {
+  app.delete("/api/bookmarks/:id", requireAuth, async (req, res) => {
     try {
-      const deleted = await storage.deleteBookmark(req.params.id);
+      const id = req.params.id as string;
+      const deleted = await storage.deleteBookmark(id, req.user!.id);
       if (!deleted) {
         return res.status(404).json({ error: "Bookmark not found" });
       }
@@ -108,7 +168,7 @@ export async function registerRoutes(
   });
 
   // Search Spotify episodes
-  app.get("/api/spotify/search", async (req, res) => {
+  app.get("/api/spotify/search", requireAuth, async (req, res) => {
     try {
       const query = req.query.q as string || req.query["0"] as string;
       if (!query || query.length < 2) {
@@ -123,7 +183,7 @@ export async function registerRoutes(
   });
 
   // Get saved shows/episodes
-  app.get("/api/spotify/shows", async (req, res) => {
+  app.get("/api/spotify/shows", requireAuth, async (req, res) => {
     try {
       const episodes = await getSavedShows();
       res.json(episodes);
@@ -134,7 +194,7 @@ export async function registerRoutes(
   });
 
   // Get recently played episodes (falls back to saved shows if unavailable)
-  app.get("/api/spotify/recent", async (req, res) => {
+  app.get("/api/spotify/recent", requireAuth, async (req, res) => {
     try {
       const episodes = await getRecentlyPlayedEpisodes();
       if (episodes.length > 0) {
@@ -155,7 +215,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/spotify/player", async (req, res) => {
+  app.get("/api/spotify/player", requireAuth, async (req, res) => {
     try {
       const playback = await getCurrentPlayback();
       res.json(playback);
@@ -165,7 +225,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/spotify/player/pause", async (req, res) => {
+  app.put("/api/spotify/player/pause", requireAuth, async (req, res) => {
     try {
       await pausePlayback();
       res.json({ success: true });
@@ -175,7 +235,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/spotify/player/play", async (req, res) => {
+  app.put("/api/spotify/player/play", requireAuth, async (req, res) => {
     try {
       await resumePlayback();
       res.json({ success: true });
@@ -185,7 +245,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/spotify/player/seek", async (req, res) => {
+  app.put("/api/spotify/player/seek", requireAuth, async (req, res) => {
     try {
       const { positionMs } = req.body;
       if (typeof positionMs !== "number" || positionMs < 0) {
@@ -199,9 +259,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/episode-transcripts/completed", async (_req, res) => {
+  app.get("/api/episode-transcripts/completed", requireAuth, async (req, res) => {
     try {
-      const transcripts = await storage.getCompletedEpisodeTranscripts();
+      const transcripts = await storage.getCompletedEpisodeTranscripts(req.user!.id);
       res.json(transcripts);
     } catch (error) {
       console.error("Error fetching completed transcripts:", error);
@@ -209,9 +269,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/episode-transcripts/statuses", async (_req, res) => {
+  app.get("/api/episode-transcripts/statuses", requireAuth, async (req, res) => {
     try {
-      const statuses = await storage.getAllEpisodeTranscriptStatuses();
+      const statuses = await storage.getAllEpisodeTranscriptStatuses(req.user!.id);
       res.json(statuses);
     } catch (error) {
       console.error("Error fetching transcript statuses:", error);
@@ -219,7 +279,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/episode-transcripts", async (req, res) => {
+  app.post("/api/episode-transcripts", requireAuth, async (req, res) => {
     try {
       const { episodeId, episodeName, showName, showImageUrl, audioUrl } = req.body;
       if (!episodeId || typeof episodeId !== "string" ||
@@ -239,12 +299,13 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Only HTTP/HTTPS URLs are allowed" });
       }
 
-      const existing = await storage.getEpisodeTranscriptByEpisodeId(episodeId);
+      const existing = await storage.getEpisodeTranscriptByEpisodeId(episodeId, req.user!.id);
       if (existing && (existing.status === "processing" || existing.status === "completed")) {
         return res.json(existing);
       }
 
       const transcript = await storage.createEpisodeTranscript({
+        userId: req.user!.id,
         episodeId,
         episodeName,
         showName,
@@ -268,9 +329,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/episode-transcripts/by-episode/:episodeId", async (req, res) => {
+  app.get("/api/episode-transcripts/by-episode/:episodeId", requireAuth, async (req, res) => {
     try {
-      const transcript = await storage.getEpisodeTranscriptByEpisodeId(req.params.episodeId);
+      const episodeId = req.params.episodeId as string;
+      const transcript = await storage.getEpisodeTranscriptByEpisodeId(episodeId, req.user!.id);
       if (!transcript) {
         return res.status(404).json({ error: "No transcript found for this episode" });
       }
@@ -281,10 +343,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/episode-transcripts/:id", async (req, res) => {
+  app.get("/api/episode-transcripts/:id", requireAuth, async (req, res) => {
     try {
-      const transcript = await storage.getEpisodeTranscript(req.params.id);
-      if (!transcript) {
+      const id = req.params.id as string;
+      const transcript = await storage.getEpisodeTranscript(id);
+      if (!transcript || transcript.userId !== req.user!.id) {
         return res.status(404).json({ error: "Transcript not found" });
       }
       res.json(transcript);
@@ -294,7 +357,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/transcribe", async (req, res) => {
+  app.post("/api/transcribe", requireAuth, async (req, res) => {
     try {
       const { audioUrl, timestampMs, durationMs } = req.body;
       if (!audioUrl || typeof audioUrl !== "string") {

@@ -3,7 +3,13 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
+import session from "express-session";
+import passport from "passport";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
+import { setupAuth } from "./auth";
 
+const PostgresSessionStore = connectPg(session);
 const app = express();
 const httpServer = createServer(app);
 
@@ -61,6 +67,30 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const sessionConfig: session.SessionOptions = {
+    secret: process.env.SESSION_SECRET || "development-secret",
+    resave: false,
+    saveUninitialized: false,
+    store: new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
+    }),
+    cookie: {
+      secure: app.get("env") === "production",
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    },
+  };
+
+  if (app.get("env") === "production") {
+    app.set("trust proxy", 1);
+  }
+
+  app.use(session(sessionConfig));
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  setupAuth(app);
+
   await seedDatabase();
   const { migrateUnresolvedEpisodeIds } = await import("./seed");
   migrateUnresolvedEpisodeIds();

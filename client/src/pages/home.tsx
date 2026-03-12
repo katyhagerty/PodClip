@@ -10,7 +10,7 @@ import { EpisodeSearchDialog } from "@/components/episode-search-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Headphones, Bookmark, Radio, FileText } from "lucide-react";
+import { Plus, Search, Headphones, Bookmark, Radio, FileText, LogOut } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import { Link } from "wouter";
 import type { Bookmark as BookmarkType, InsertBookmark } from "@shared/schema";
@@ -29,8 +29,20 @@ export default function Home() {
     audioUrl?: string;
   } | undefined>();
 
+  const { data: user } = useQuery<{ id: number; username: string }>({
+    queryKey: ["/api/user"],
+  });
+
   const { data: bookmarks, isLoading } = useQuery<BookmarkType[]>({
     queryKey: ["/api/bookmarks"],
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auth/logout"),
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/user"], null);
+      window.location.href = "/login";
+    },
   });
 
   const triggerTranscription = async (bookmarkId: string, audioUrl: string, timestampMs: number, durationMs: number) => {
@@ -190,6 +202,16 @@ export default function Home() {
               <span className="hidden sm:inline">Connected</span>
             </div>
             <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+              data-testid="button-logout"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>

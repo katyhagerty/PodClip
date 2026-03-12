@@ -20,6 +20,7 @@ export type User = typeof users.$inferSelect;
 // Podcast clip bookmarks
 export const bookmarks = pgTable("bookmarks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id"),
   episodeId: text("episode_id").notNull(),
   episodeName: text("episode_name").notNull(),
   showName: text("show_name").notNull(),
@@ -49,6 +50,7 @@ export type Bookmark = typeof bookmarks.$inferSelect;
 
 export const episodeTranscripts = pgTable("episode_transcripts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id"),
   episodeId: text("episode_id").notNull(),
   episodeName: text("episode_name").notNull(),
   showName: text("show_name").notNull(),
