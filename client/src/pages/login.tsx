@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Headphones } from "lucide-react";
+import { SiGithub } from "react-icons/si";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -70,6 +71,13 @@ export default function LoginPage() {
                 <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 4.5c2.07 0 3.75 1.68 3.75 3.75S14.07 12 12 12 8.25 10.32 8.25 8.25 9.93 4.5 12 4.5zm0 15c-2.625 0-5.1-1.05-6.9-2.925C5.775 14.7 8.775 13.5 12 13.5s6.225 1.2 6.9 3.075C17.1 18.45 14.625 19.5 12 19.5z"/>
               </svg>
               Continue with Replit
+            </Button>
+          </a>
+
+          <a href="/api/login" data-testid="button-signin-github">
+            <Button variant="outline" className="w-full gap-2" type="button">
+              <SiGithub className="w-4 h-4" />
+              Continue with GitHub
             </Button>
           </a>
 
