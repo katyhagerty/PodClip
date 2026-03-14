@@ -15,6 +15,16 @@ const getOidcConfig = memoize(
   { maxAge: 3600 * 1000 }
 );
 
+// In deployed Replit containers, req.hostname resolves to an internal hostname.
+// REPLIT_DOMAINS always contains the correct public-facing domain.
+function getPublicDomain(reqHostname: string): string {
+  const replitDomains = process.env.REPLIT_DOMAINS;
+  if (replitDomains) {
+    return replitDomains.split(",")[0].trim();
+  }
+  return reqHostname;
+}
+
 export async function registerOIDCRoutes(app: Express) {
   const config = await getOidcConfig();
 
@@ -54,33 +64,36 @@ export async function registerOIDCRoutes(app: Express) {
   };
 
   app.get("/api/login", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const domain = getPublicDomain(req.hostname);
+    ensureStrategy(domain);
+    passport.authenticate(`replitauth:${domain}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const domain = getPublicDomain(req.hostname);
+    ensureStrategy(domain);
+    passport.authenticate(`replitauth:${domain}`, {
       successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
+      failureRedirect: "/login",
     })(req, res, next);
   });
 
   app.get("/api/logout", (req, res) => {
     req.logout(async () => {
       try {
+        const domain = getPublicDomain(req.hostname);
         const cfg = await getOidcConfig();
         res.redirect(
           client.buildEndSessionUrl(cfg, {
             client_id: process.env.REPL_ID!,
-            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+            post_logout_redirect_uri: `https://${domain}`,
           }).href
         );
       } catch {
-        res.redirect("/");
+        res.redirect("/login");
       }
     });
   });
