@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Headphones } from "lucide-react";
-import { SiGoogle } from "react-icons/si";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -65,13 +64,6 @@ export default function LoginPage() {
 
         <CardContent className="space-y-3">
           {/* OAuth options */}
-          <a href="/api/login" data-testid="button-signin-google">
-            <Button variant="outline" className="w-full gap-2" type="button">
-              <SiGoogle className="w-4 h-4" />
-              Continue with Google
-            </Button>
-          </a>
-
           <a href="/api/login" data-testid="button-signin-replit">
             <Button variant="outline" className="w-full gap-2" type="button">
               <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg">
