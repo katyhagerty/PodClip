@@ -134,9 +134,6 @@ The `/transcript` page allows users to generate full episode transcripts:
 - `zod` - Runtime type validation
 - `react-hook-form` - Form handling with Zod integration
 
-### GitHub Integration
-The app is connected to the GitHub API via Replit's connector system (`server/github.ts`). This gives the server authenticated access to GitHub APIs (repositories, issues, pull requests, user data) using the `@replit/connectors-sdk` proxy pattern. The login page also shows a "Continue with GitHub" button that routes through Replit's OIDC (`/api/login`), which supports GitHub as an OAuth provider.
-
 ### SEO & Mobile Web App
 - Open Graph and Twitter Card meta tags in `client/index.html`
 - Apple mobile web app meta tags for iOS home screen support
