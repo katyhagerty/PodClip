@@ -67,29 +67,30 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const sessionConfig: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "development-secret",
-    resave: false,
-    saveUninitialized: false,
-    store: new PostgresSessionStore({
-      pool,
-      createTableIfMissing: true,
-    }),
-    cookie: {
-      secure: app.get("env") === "production",
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    },
-  };
+  app.set("trust proxy", 1);
 
-  if (app.get("env") === "production") {
-    app.set("trust proxy", 1);
-  }
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET!,
+      resave: false,
+      saveUninitialized: false,
+      store: new PostgresSessionStore({
+        pool,
+        createTableIfMissing: true,
+        tableName: "session",
+      }),
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      },
+    })
+  );
 
-  app.use(session(sessionConfig));
   app.use(passport.initialize());
   app.use(passport.session());
 
-  setupAuth(app);
+  await setupAuth(app);
 
   await seedDatabase();
   const { migrateUnresolvedEpisodeIds } = await import("./seed");
@@ -109,9 +110,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -119,10 +117,6 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {

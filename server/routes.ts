@@ -1,11 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBookmarkSchema, patchBookmarkSchema, insertUserSchema } from "@shared/schema";
+import { insertBookmarkSchema, patchBookmarkSchema, registerUserSchema } from "@shared/schema";
 import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId, getCurrentPlayback, pausePlayback, resumePlayback, seekPlayback } from "./spotify";
 import { transcribeClip } from "./transcribe";
 import { transcribeFullEpisode } from "./transcribe-episode";
-import { setupAuth, requireAuth, hashPassword } from "./auth";
+import { requireAuth, hashPassword } from "./auth";
 import passport from "passport";
 
 export async function registerRoutes(
@@ -15,19 +15,19 @@ export async function registerRoutes(
   
   app.post("/api/auth/register", async (req, res, next) => {
     try {
-      const parsed = insertUserSchema.safeParse(req.body);
+      const parsed = registerUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
+        return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid input" });
       }
 
       const existingUser = await storage.getUserByUsername(parsed.data.username);
       if (existingUser) {
-        return res.status(400).json({ error: "Username already exists" });
+        return res.status(400).json({ error: "Username already taken" });
       }
 
       const hashedPassword = await hashPassword(parsed.data.password);
       const user = await storage.createUser({
-        ...parsed.data,
+        username: parsed.data.username,
         password: hashedPassword,
       });
 
@@ -61,10 +61,21 @@ export async function registerRoutes(
   });
 
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) {
+    if (!req.isAuthenticated() || !req.user) {
       return res.status(401).json({ error: "Not logged in" });
     }
-    res.json({ id: req.user.id, username: req.user.username });
+    const u = req.user;
+    res.json({
+      id: u.id,
+      username: u.username,
+      email: u.email,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      profileImageUrl: u.profileImageUrl,
+      displayName: u.firstName
+        ? [u.firstName, u.lastName].filter(Boolean).join(" ")
+        : (u.username ?? u.email ?? "User"),
+    });
   });
 
   // Get all bookmarks

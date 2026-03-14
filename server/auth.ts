@@ -3,11 +3,12 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { type Express, type Request, type Response, type NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
-import { type User as SelectUser } from "@shared/schema";
+import { type User } from "@shared/schema";
+import { registerOIDCRoutes } from "./replit_integrations/auth/replitAuth";
 
 declare global {
   namespace Express {
-    interface User extends SelectUser {}
+    interface User extends Omit<import("@shared/schema").User, never> {}
   }
 }
 
@@ -19,13 +20,18 @@ export async function comparePassword(plain: string, hash: string) {
   return await bcrypt.compare(plain, hash);
 }
 
-export function setupAuth(app: Express) {
+export async function setupAuth(app: Express) {
+  // Local username/password strategy
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
-        if (!user || !(await comparePassword(password, user.password))) {
-          return done(null, false);
+        if (!user || !user.password) {
+          return done(null, false, { message: "Invalid username or password" });
+        }
+        const valid = await comparePassword(password, user.password);
+        if (!valid) {
+          return done(null, false, { message: "Invalid username or password" });
         }
         return done(null, user);
       } catch (err) {
@@ -34,23 +40,32 @@ export function setupAuth(app: Express) {
     }),
   );
 
-  passport.serializeUser((user, done) => {
+  // Unified serialize/deserialize — works for both local and OAuth users
+  // since both end up as a row in our users table
+  passport.serializeUser((user: User, done) => {
     done(null, user.id);
   });
 
   passport.deserializeUser(async (id: string, done) => {
     try {
       const user = await storage.getUser(id);
-      done(null, user);
+      done(null, user ?? false);
     } catch (err) {
       done(err);
     }
   });
+
+  // Register Replit OIDC routes (/api/login, /api/callback, /api/logout)
+  try {
+    await registerOIDCRoutes(app);
+  } catch (err) {
+    console.warn("OIDC setup failed (Replit Auth unavailable in dev?):", err);
+  }
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.isAuthenticated()) {
-    return res.status(401).send("Unauthorized");
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
   next();
 }

@@ -11,12 +11,14 @@ import {
   episodeTranscripts,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByReplitId(replitId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  upsertUserByReplitId(data: { replitId: string; email?: string | null; firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User>;
   
   getBookmarks(userId: string): Promise<Bookmark[]>;
   getBookmark(id: string): Promise<Bookmark | undefined>;
@@ -44,8 +46,30 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByReplitId(replitId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.replitId, replitId));
+    return user;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async upsertUserByReplitId(data: { replitId: string; email?: string | null; firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(data)
+      .onConflictDoUpdate({
+        target: users.replitId,
+        set: {
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          profileImageUrl: data.profileImageUrl,
+        },
+      })
+      .returning();
     return user;
   }
 

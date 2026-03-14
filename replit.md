@@ -44,7 +44,7 @@ Key server modules:
 - **Database**: PostgreSQL via Drizzle ORM
 - **Schema Location**: `shared/schema.ts` (shared between frontend and backend)
 - **Tables**:
-  - `users` - User accounts with username/password
+  - `users` - User accounts supporting both local (username/password) and OAuth (Replit/Google) login. Fields: `id`, `username` (nullable), `password` (nullable), `replitId` (nullable), `email`, `firstName`, `lastName`, `profileImageUrl`
   - `bookmarks` - Podcast clip bookmarks with episode metadata, timestamps, notes, transcripts, and audio URLs
   - `episode_transcripts` - Full episode transcripts with segments (text + timestamps), status tracking, and progress
 - **Validation**: Zod schemas generated from Drizzle schemas via drizzle-zod
