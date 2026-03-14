@@ -56,10 +56,25 @@ export async function setupAuth(app: Express) {
   });
 
   // Register Replit OIDC routes (/api/login, /api/callback, /api/logout)
+  let oidcAvailable = false;
   try {
     await registerOIDCRoutes(app);
+    oidcAvailable = true;
   } catch (err) {
-    console.warn("OIDC setup failed (Replit Auth unavailable in dev?):", err);
+    console.warn("OIDC setup failed — OAuth login unavailable:", err);
+  }
+
+  // Fallback handlers if OIDC failed to initialize
+  if (!oidcAvailable) {
+    app.get("/api/login", (_req, res) => {
+      res.redirect("/?error=oauth_unavailable");
+    });
+    app.get("/api/callback", (_req, res) => {
+      res.redirect("/?error=oauth_unavailable");
+    });
+    app.get("/api/logout", (req, res) => {
+      req.logout(() => res.redirect("/"));
+    });
   }
 }
 

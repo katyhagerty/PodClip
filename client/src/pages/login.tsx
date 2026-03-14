@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Headphones } from "lucide-react";
-import { SiGoogle } from "react-icons/si";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -63,34 +62,7 @@ export default function LoginPage() {
           </p>
         </CardHeader>
 
-        <CardContent className="space-y-3">
-          {/* OAuth options */}
-          <a href="/api/login" data-testid="button-signin-google">
-            <Button variant="outline" className="w-full gap-2" type="button">
-              <SiGoogle className="w-4 h-4" />
-              Continue with Google
-            </Button>
-          </a>
-
-          <a href="/api/login" data-testid="button-signin-replit">
-            <Button variant="outline" className="w-full gap-2" type="button">
-              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 4.5c2.07 0 3.75 1.68 3.75 3.75S14.07 12 12 12 8.25 10.32 8.25 8.25 9.93 4.5 12 4.5zm0 15c-2.625 0-5.1-1.05-6.9-2.925C5.775 14.7 8.775 13.5 12 13.5s6.225 1.2 6.9 3.075C17.1 18.45 14.625 19.5 12 19.5z"/>
-              </svg>
-              Continue with Replit
-            </Button>
-          </a>
-
-          <div className="relative py-1">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">or sign in with username</span>
-            </div>
-          </div>
-
-          {/* Local username/password form */}
+        <CardContent className="space-y-4">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
