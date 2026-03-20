@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertBookmarkSchema, patchBookmarkSchema, registerUserSchema } from "@shared/schema";
-import { searchEpisodes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId, getCurrentPlayback, pausePlayback, resumePlayback, seekPlayback } from "./spotify";
+import { searchEpisodes, searchITunes, getSavedShows, getRecentlyPlayedEpisodes, resolveSpotifyEpisodeId, getCurrentPlayback, pausePlayback, resumePlayback, seekPlayback } from "./spotify";
 import { transcribeClip } from "./transcribe";
 import { transcribeFullEpisode } from "./transcribe-episode";
 import { requireAuth, hashPassword } from "./auth";
@@ -175,6 +175,21 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting bookmark:", error);
       res.status(500).json({ error: "Failed to delete bookmark" });
+    }
+  });
+
+  // iTunes-only episode search (used by transcript page — always returns full audio URLs)
+  app.get("/api/itunes/search", requireAuth, async (req, res) => {
+    try {
+      const query = req.query.q as string || req.query["0"] as string;
+      if (!query || query.length < 2) {
+        return res.json([]);
+      }
+      const episodes = await searchITunes(query);
+      res.json(episodes);
+    } catch (error) {
+      console.error("Error searching iTunes:", error);
+      res.status(500).json({ error: "Failed to search iTunes" });
     }
   });
 

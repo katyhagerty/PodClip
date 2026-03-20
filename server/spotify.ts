@@ -119,7 +119,7 @@ async function searchSpotifyDirect(query: string): Promise<SpotifyEpisode[]> {
   }));
 }
 
-async function searchiTunesFallback(query: string): Promise<SpotifyEpisode[]> {
+export async function searchITunes(query: string): Promise<SpotifyEpisode[]> {
   const response = await fetch(
     `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=podcast&entity=podcastEpisode&limit=20`
   );
@@ -191,7 +191,7 @@ export async function searchEpisodes(query: string): Promise<SpotifyEpisode[]> {
   } catch (spotifyError) {
     console.log("Spotify search failed, falling back to iTunes:", (spotifyError as Error).message);
     try {
-      return await searchiTunesFallback(query);
+      return await searchITunes(query);
     } catch (itunesError) {
       console.error("iTunes fallback also failed:", itunesError);
       throw spotifyError;

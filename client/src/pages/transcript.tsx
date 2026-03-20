@@ -175,7 +175,7 @@ export default function TranscriptPage() {
   };
 
   const { data: searchResults, isLoading: searchLoading } = useQuery<Episode[]>({
-    queryKey: ["/api/spotify/search", { q: debouncedEpisodeSearch }],
+    queryKey: ["/api/itunes/search", { q: debouncedEpisodeSearch }],
     enabled: debouncedEpisodeSearch.length >= 2,
     retry: false,
   });
